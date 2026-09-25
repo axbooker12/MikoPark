@@ -3,7 +3,7 @@ import { EFFORTS, MODELS, findModel, modelLabel, type Effort } from "../../share
 import type { Agent, Attachment, Channel, Workspace } from "../../shared/types.ts";
 import { api } from "./api.ts";
 import { formatBytes, prepareImage } from "./files.ts";
-import { speechInputSupported, speechOutputSupported, stopSpeaking, useDictation, useSpeaking, useVoiceNotice, type MicMode } from "./voice.ts";
+import { speechInputSupported, speechOutputSupported, stopSpeaking, useDictation, useSpeaking, useVoiceNotice } from "./voice.ts";
 
 interface Props {
   ws: Workspace;
@@ -12,14 +12,14 @@ interface Props {
   dmAgent?: Agent;
   mode: "live" | "demo";
   serverModel: string;
-  agentBusy: boolean;
-  voice: { mode: MicMode; setMode: (m: MicMode) => void; readAloud: boolean; setReadAloud: (on: boolean) => void };
+  voice: { readAloud: boolean; setReadAloud: (on: boolean) => void };
+  /** Starts a voice call with this conversation's agent (only offered in direct messages). */
+  onCall?: () => void;
   onHire: () => void;
   /** Files dropped on the chat area are handed in here. */
   dropped: File[] | null;
   onDropHandled: () => void;
-  /** Called after a message is sent; byVoice is true when it was spoken rather than typed. */
-  onSent: (byVoice: boolean) => void;
+  onSent: () => void;
 }
 
 interface Pending {
@@ -44,7 +44,7 @@ const COMMANDS: Command[] = [
   { name: "remember", args: "<fact>", help: "Save a fact to team memory" },
   { name: "summarize", help: "Ask for a summary of this conversation" },
   { name: "model", help: "Choose the model and thinking depth" },
-  { name: "voice", help: "Start a hands-free voice conversation" },
+  { name: "call", help: "Start a voice call with this agent" },
   { name: "hire", help: "Visit departments to bring on specialists" },
   { name: "clear", help: "Clear this conversation's messages" },
   { name: "help", help: "Show these commands" },
@@ -54,8 +54,7 @@ const MAX_FOLDER_FILES = 100;
 const SKIP_IN_FOLDERS = /(^|\/)(\.git|node_modules|\.DS_Store|__pycache__|\.venv|dist|build)(\/|$)/;
 
 export function Composer(props: Props) {
-  const { ws, channel, members, dmAgent, mode, serverModel, agentBusy, voice, onHire, dropped, onDropHandled, onSent } = props;
-  const spokenDraft = useRef(false); // the current draft came (at least partly) from the microphone
+  const { ws, channel, members, dmAgent, mode, serverModel, voice, onHire, onCall, dropped, onDropHandled, onSent } = props;
   const draftKey = `mikopark:draft:${channel.id}`;
   const [text, setText] = useState(() => {
     try {
@@ -214,9 +213,10 @@ export function Composer(props: Props) {
       case "model":
         setOpenMenu("model");
         return true;
+      case "call":
       case "voice":
-        voice.setMode("handsfree");
-        startMic("handsfree");
+        if (!onCall) return fail("Calls are with one agent: open an agent's direct message and try again"), true;
+        onCall();
         return true;
       case "hire":
         onHire();
@@ -250,9 +250,8 @@ export function Composer(props: Props) {
         setText("");
         return;
       }
-      await api.send(channel.id, trimmed, ready.map((a) => a.id), { viaVoice: spokenDraft.current });
-      onSent(spokenDraft.current);
-      spokenDraft.current = false;
+      await api.send(channel.id, trimmed, ready.map((a) => a.id));
+      onSent();
       setText("");
       pending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
       setPending([]);
@@ -263,56 +262,23 @@ export function Composer(props: Props) {
     }
   }
 
-  // ---- microphone ----------------------------------------------------------------------
+  // ---- microphone: dictation types into the box; talking with an agent happens in a call ----
 
   const baseText = useRef("");
-  const handsFree = useRef(false);
-  const [handsFreeOn, setHandsFreeOn] = useState(false);
   const dictation = useDictation({
-    onText: (t) => {
-      spokenDraft.current = true;
-      setText(handsFree.current || !baseText.current ? t : `${baseText.current} ${t}`);
-    },
-    onPause: (finalText) => {
-      if (!handsFree.current) return;
-      setText("");
-      void send(finalText);
-    },
+    onText: (t) => setText(baseText.current ? `${baseText.current} ${t}` : t),
   });
-
-  function startMic(m: MicMode) {
-    stopSpeaking();
-    handsFree.current = m === "handsfree";
-    if (m === "handsfree") {
-      if (!voice.readAloud) voice.setReadAloud(true);
-      setHandsFreeOn(true); // the effect below starts listening when nobody is talking
-    } else {
-      baseText.current = text.trim();
-      dictation.start();
-    }
-  }
-
-  // Hands-free: pause listening while an agent replies or speaks, so it doesn't hear itself.
-  useEffect(() => {
-    if (!handsFreeOn) return;
-    const quiet = !agentBusy && !speaking;
-    if (!quiet && dictation.listening) dictation.stop();
-    if (quiet && !dictation.listening) dictation.start();
-  }, [handsFreeOn, agentBusy, speaking, dictation.listening]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const micActive = handsFreeOn || dictation.listening;
+  const micActive = dictation.listening;
   const toggleMic = () => {
     // Keep the keyboard in the message box so Enter sends instead of re-pressing the mic.
     requestAnimationFrame(() => ref.current?.focus());
-    if (!micActive) return startMic(voice.mode);
-    setHandsFreeOn(false);
-    handsFree.current = false;
-    dictation.stop();
+    if (micActive) return dictation.stop();
+    stopSpeaking();
+    baseText.current = text.trim();
+    dictation.start();
   };
   useEffect(() => {
-    if (!dictation.error) return;
-    setHandsFreeOn(false);
-    fail(dictation.error);
+    if (dictation.error) fail(dictation.error);
   }, [dictation.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- model --------------------------------------------------------------------------
@@ -330,11 +296,7 @@ export function Composer(props: Props) {
   // ---- render ---------------------------------------------------------------------------
 
   const hint = micActive
-    ? handsFreeOn
-      ? agentBusy || speaking
-        ? "Waiting for the reply…"
-        : "Listening… speak, then pause to send"
-      : "Listening… click the mic to stop"
+    ? "Listening… click the mic to stop"
     : channel.kind === "dm"
       ? `Message ${dmAgent?.name ?? ""} — type / for commands`
       : `Message #${channel.name} — @mention an agent, / for commands`;
@@ -395,7 +357,6 @@ export function Composer(props: Props) {
           value={text}
           placeholder={hint}
           onChange={(e) => {
-            if (!e.target.value.trim()) spokenDraft.current = false;
             setText(e.target.value);
             setMenuIndex(0);
           }}
@@ -456,13 +417,11 @@ export function Composer(props: Props) {
               title={
                 speechInputSupported
                   ? micActive
-                    ? "Stop listening"
-                    : voice.mode === "handsfree"
-                      ? "Start hands-free conversation"
-                      : "Dictate"
+                    ? "Stop dictating"
+                    : "Dictate: your words are typed into the box"
                   : "Voice input isn't supported in this browser. Try Chrome, Edge or Safari."
               }
-              aria-label="Microphone"
+              aria-label="Dictate"
             >
               🎤
             </button>
@@ -473,19 +432,16 @@ export function Composer(props: Props) {
               button={<span aria-hidden className="caret">▾</span>}
               className="caret-btn"
             >
-              <p className="menu-title">Microphone mode</p>
-              <Choice checked={voice.mode === "dictate"} onClick={() => voice.setMode("dictate")} title="Dictate" sub="Your words appear in the box and you press send. The reply is spoken back." />
-              <Choice
-                checked={voice.mode === "handsfree"}
-                onClick={() => voice.setMode("handsfree")}
-                title="Hands-free conversation"
-                sub="Sends when you pause, reads replies aloud, then listens again"
-              />
+              {onCall && (
+                <button onClick={() => (setOpenMenu(null), onCall())}>
+                  📞 Start a voice call with {dmAgent?.name}
+                </button>
+              )}
               <label className={`menu-check ${speechOutputSupported ? "" : "disabled"}`}>
                 <input type="checkbox" checked={voice.readAloud} disabled={!speechOutputSupported} onChange={(e) => voice.setReadAloud(e.target.checked)} />
-                Read every reply aloud (even when you type)
+                Read replies aloud in chat
               </label>
-              <p className="menu-note">Your browser handles speech recognition; some browsers send audio to their provider to transcribe it.</p>
+              <p className="menu-note">🎤 types what you say into the box. To talk it through out loud, start a call. Your browser handles speech recognition; some browsers send audio to their provider to transcribe it.</p>
             </Menu>
           </div>
 

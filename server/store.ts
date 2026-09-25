@@ -404,6 +404,80 @@ export class Store extends EventEmitter {
     this.workspaceChanged();
   }
 
+  // ---- voice calls -----------------------------------------------------------
+
+  /** Starts a voice call with the agent of a direct message. The call is a hidden channel holding the transcript. */
+  startCall(dmId: string): Channel {
+    const dm = this.channel(dmId);
+    if (!dm || dm.kind !== "dm") throw new Error("Calls start from a direct message with an agent");
+    const agent = this.agent(dm.agentIds[0]);
+    if (!agent) throw new Error("Agent not found");
+    const now = Date.now();
+    const call: Channel = {
+      id: newId("call"),
+      name: `Call with ${agent.name}`,
+      topic: "",
+      kind: "call",
+      humanIds: [...dm.humanIds],
+      agentIds: [agent.id],
+      createdAt: now,
+      parentId: dm.id,
+      ...(dm.model ? { model: dm.model } : {}),
+      ...(dm.effort ? { effort: dm.effort } : {}),
+    };
+    this.workspace.channels.push(call);
+    this.workspaceChanged();
+    return call;
+  }
+
+  /** Ends a call. A call where nobody spoke leaves no transcript; otherwise the chat gets a note linking to it. */
+  endCall(callId: string): Channel | null {
+    const call = this.channel(callId);
+    if (!call || call.kind !== "call") throw new Error("Call not found");
+    if (call.endedAt) return call;
+    const turns = this.channelMessages(call.id, 10_000).filter((m) => m.content.trim());
+    if (!turns.length) {
+      this.workspace.channels = this.workspace.channels.filter((c) => c.id !== call.id);
+      this.db.messages = this.db.messages.filter((m) => m.channelId !== call.id);
+      this.workspaceChanged();
+      return null;
+    }
+    call.endedAt = Date.now();
+    this.workspaceChanged();
+    const parent = call.parentId ? this.channel(call.parentId) : undefined;
+    if (parent) {
+      const mins = Math.max(1, Math.round((call.endedAt - call.createdAt) / 60_000));
+      this.addMessage({
+        channelId: parent.id,
+        authorKind: "system",
+        authorId: "system",
+        content: `📞 ${call.name} · ${mins} min · [Open transcript](#/transcripts/${call.id})`,
+        callId: call.id,
+      });
+    }
+    return call;
+  }
+
+  deleteCall(callId: string) {
+    const call = this.channel(callId);
+    if (!call || call.kind !== "call") return;
+    this.workspace.channels = this.workspace.channels.filter((c) => c.id !== callId);
+    this.db.messages = this.db.messages.filter((m) => m.channelId !== callId && m.callId !== callId);
+    this.persist();
+    this.emitEvent({ type: "snapshot", workspace: this.workspace, messages: this.snapshotMessages(), mode: "live" });
+  }
+
+  /** Plain-text transcript of a call. */
+  transcript(callId: string): string {
+    const call = this.channel(callId);
+    if (!call || call.kind !== "call") throw new Error("Call not found");
+    const when = new Date(call.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+    const lines = this.channelMessages(call.id, 10_000)
+      .filter((m) => m.content.trim())
+      .map((m) => `${this.authorName(m.authorKind, m.authorId)}: ${m.content.trim()}`);
+    return [`${call.name} — ${when}`, "", ...lines].join("\n");
+  }
+
   // ---- channels ------------------------------------------------------------
 
   createChannel(name: string, topic: string, agentIds: string[]): Channel {

@@ -1,5 +1,5 @@
 import type { Effort } from "../../shared/models.ts";
-import type { AgentTemplate, AgentVoice, Attachment, TaskStatus, Voice } from "../../shared/types.ts";
+import type { AgentTemplate, AgentVoice, Attachment, Channel, TaskStatus, Voice } from "../../shared/types.ts";
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${url}`, {
@@ -56,4 +56,7 @@ export const api = {
     return res.json();
   },
   deleteVoice: (id: string) => call("DELETE", `/voices/${id}`),
+  startCall: (channelId: string) => call<Channel>("POST", "/calls", { channelId }),
+  endCall: (id: string) => call<{ call: Channel | null }>("POST", `/calls/${id}/end`),
+  deleteCall: (id: string) => call("DELETE", `/calls/${id}`),
 };

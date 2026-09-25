@@ -1,6 +1,6 @@
 // Browser speech: dictation via the Web Speech API, and reading replies aloud via speech synthesis.
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentVoice } from "../../shared/types.ts";
+import type { Agent, AgentVoice, Message } from "../../shared/types.ts";
 
 // The Web Speech API isn't in every TypeScript DOM lib, so declare the small part we use.
 interface RecognitionResult {
@@ -33,8 +33,6 @@ const Ctor: RecognitionCtor | undefined =
 export const speechInputSupported = !!Ctor;
 export const speechOutputSupported = typeof window !== "undefined" && "speechSynthesis" in window;
 
-export type MicMode = "dictate" | "handsfree";
-
 // ---- persisted voice preferences ---------------------------------------------
 
 function readPref<T extends string>(key: string, fallback: T, allowed: readonly T[]): T {
@@ -54,18 +52,13 @@ function writePref(key: string, value: string) {
 }
 
 export function useVoicePrefs() {
-  const [mode, setModeState] = useState<MicMode>(() => readPref("mikopark:mic-mode", "dictate", ["dictate", "handsfree"] as const));
   const [readAloud, setReadAloudState] = useState(() => readPref("mikopark:read-aloud", "off", ["on", "off"] as const) === "on");
-  const setMode = (m: MicMode) => {
-    setModeState(m);
-    writePref("mikopark:mic-mode", m);
-  };
   const setReadAloud = (on: boolean) => {
     setReadAloudState(on);
     writePref("mikopark:read-aloud", on ? "on" : "off");
     if (!on) stopSpeaking();
   };
-  return { mode, setMode, readAloud, setReadAloud };
+  return { readAloud, setReadAloud };
 }
 
 // ---- speech output -------------------------------------------------------------
@@ -440,4 +433,43 @@ export function useDictation(opts: { onText: (text: string) => void; onPause?: (
   );
 
   return { listening, error, start, stop };
+}
+
+/**
+ * Speaks agents' replies in `messages` as they arrive, a sentence at a time while they're still being
+ * written, in each agent's own voice. Messages already present when this starts are never spoken.
+ */
+export function useSpokenReplies(messages: Message[], agents: Agent[], enabled: boolean) {
+  const spokenUpTo = useRef(new Map<string, number>(messages.filter((m) => !m.streaming).map((m) => [m.id, Infinity])));
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.authorKind !== "agent" || m.error) continue;
+      const done = spokenUpTo.current.get(m.id) ?? 0;
+      if (done === Infinity) continue;
+      if (!enabled) {
+        if (!m.streaming) spokenUpTo.current.set(m.id, Infinity);
+        continue;
+      }
+      const voice = agents.find((a) => a.id === m.authorId)?.voice;
+      if (m.streaming) {
+        const cut = sentenceBoundary(m.content, done);
+        if (cut > done) {
+          speak(m.content.slice(done, cut), voice);
+          spokenUpTo.current.set(m.id, cut);
+        }
+      } else {
+        const rest = m.content.slice(done);
+        if (rest.trim()) speak(rest, voice);
+        spokenUpTo.current.set(m.id, Infinity);
+      }
+    }
+  }, [messages, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Stop speaking everything received so far, including the rest of a reply still being written. */
+  const silence = useCallback(() => {
+    for (const m of latest.current) spokenUpTo.current.set(m.id, Infinity);
+  }, []);
+  const latest = useRef(messages);
+  latest.current = messages;
+  return { silence };
 }

@@ -58,7 +58,9 @@ export function systemPrompt(store: Store, agent: Agent, channel: Channel): { st
     });
   const memory = ws.memory.map((m) => `- ${m.content}`);
   const where =
-    channel.kind === "dm"
+    channel.kind === "call"
+      ? "You are on a live voice call with a human teammate. Everything you say is spoken aloud to them, so talk naturally and briefly, the way you would on the phone."
+      : channel.kind === "dm"
       ? "You are in a direct message with a human teammate. Teammates can't see DMs, so @mentions here won't reach them — use create_task to hand off work instead."
       : `You are in the #${channel.name} channel${channel.topic ? ` (topic: ${channel.topic})` : ""}.`;
 
@@ -151,10 +153,27 @@ function attachmentParts(store: Store, attachments: Attachment[], full: boolean,
   return parts;
 }
 
+const MAX_CALL_TRANSCRIPT_CHARS = 8000;
+
+function callTranscriptFor(store: Store, callId: string): string | null {
+  try {
+    const text = store.transcript(callId);
+    const cut = text.length > MAX_CALL_TRANSCRIPT_CHARS;
+    return `Transcript of an earlier voice call:\n${cut ? `…${text.slice(-MAX_CALL_TRANSCRIPT_CHARS)}` : text}`;
+  } catch {
+    return null;
+  }
+}
+
 /** Converts channel history into alternating user/assistant turns from `agent`'s point of view. */
 export function historyFor(store: Store, agent: Agent, channel: Channel, extra?: string): BetaMessageParam[] {
   const turns: { role: "user" | "assistant"; parts: Part[] }[] = [];
-  const history = store.channelMessages(channel.id);
+  // A call continues its chat: the agent hears the recent chat first, then the call so far.
+  const parent = channel.kind === "call" && channel.parentId ? store.channel(channel.parentId) : undefined;
+  const history = [
+    ...(parent ? store.channelMessages(parent.id, 20).filter((m) => m.callId !== channel.id) : []),
+    ...store.channelMessages(channel.id),
+  ];
   const budget = { bytes: 0 };
   history.forEach((m, i) => {
     const files = m.attachments ?? [];
@@ -165,7 +184,9 @@ export function historyFor(store: Store, agent: Agent, channel: Channel, extra?:
     if (files.length && !mine) {
       parts.push(...attachmentParts(store, files, i >= history.length - RECENT_ATTACHMENT_MESSAGES, budget));
     }
-    const body = m.content.trim() || `(sent ${files.length} attachment${files.length === 1 ? "" : "s"})`;
+    // A call note in a chat stands in for the whole call, so the agent remembers what was said.
+    const callText = m.callId ? callTranscriptFor(store, m.callId) : null;
+    const body = callText ?? (m.content.trim() || `(sent ${files.length} attachment${files.length === 1 ? "" : "s"})`);
     parts.push(mine ? m.content : `[${store.authorName(m.authorKind, m.authorId)}]: ${body}`);
     const last = turns.at(-1);
     if (last && last.role === role) last.parts.push(...parts);
@@ -459,6 +480,18 @@ export class DemoBrain implements Brain {
     const files = extra ? [] : last?.attachments ?? [];
     const seen = files.length ? `I can see what you attached: ${files.map((f) => f.path ?? f.name).join(", ")}. ` : "";
     const prompt = (extra ?? (seen + (last?.content ?? ""))).trim();
+    if (channel.kind === "call") {
+      // Calls get a short, spoken-style demo reply.
+      const said = prompt.replace(/\s+/g, " ").slice(0, 80);
+      sink.status("Thinking…");
+      await sleep(this.delayMs * 20);
+      sink.status(null);
+      for (const word of `I heard you say: ${said}. This is demo mode, so add an API key and I'll really answer. What else is on your mind?`.split(/(\s+)/)) {
+        sink.delta(word);
+        if (this.delayMs) await sleep(this.delayMs);
+      }
+      return;
+    }
     sink.status("Thinking…");
     await sleep(this.delayMs * 20);
     sink.status(null);

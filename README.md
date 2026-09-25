@@ -19,11 +19,12 @@ hand them tasks, and let them build up shared team memory.
 - **Shared team memory:** facts every agent sees in every conversation. You and the agents can both add to it.
 - **Attachments:** add files, photos or whole folders (📎 menu, drag and drop, or paste). Agents see images and read
   PDFs and text/code files; other types are attached but flagged as unreadable. Large photos are resized in the browser.
-- **Slash commands:** `/task`, `/remember`, `/summarize`, `/model`, `/voice`, `/hire`, `/clear`, `/help`.
-- **Voice:** dictate into the message box, or go hands-free (sends when you pause, reads replies aloud, listens again).
-  Talk to an agent and it talks back: spoken messages get short, conversational replies with quick thinking, and
-  speech starts with the first sentence while the rest is still being written. Uses the browser's built-in speech
-  recognition (Chrome, Edge, Safari).
+- **Slash commands:** `/task`, `/remember`, `/summarize`, `/model`, `/call`, `/hire`, `/clear`, `/help`.
+- **Voice calls:** press **📞 Call** in an agent's chat to talk it through out loud. The call screen listens, sends when
+  you pause, and the agent answers in its voice (speech starts with its first sentence). Mute, interrupt, and optional
+  captions. When the call ends, the transcript is saved under **📝 Transcripts** (read, download, delete), the chat gets
+  a one-line note linking to it, and the agent remembers the call in later chats.
+- **Dictation:** 🎤 in the message box types what you say. Replies in chat can optionally be read aloud.
 - **Custom voices:** upload a short recording (WAV, MP3, M4A…) and an agent reads its replies in that voice, using a
   free, local voice engine ([Chatterbox](https://github.com/resemble-ai/chatterbox), MIT). Agents can also use any of the
   computer's built-in voices. Set it in the agent's profile under **Voice**.

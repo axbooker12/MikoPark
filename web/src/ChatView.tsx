@@ -7,7 +7,7 @@ import { MembersModal } from "./Modals.tsx";
 import { Composer, iconFor } from "./Composer.tsx";
 import { formatBytes } from "./files.ts";
 import { Avatar, Md, clock } from "./ui.tsx";
-import { sentenceBoundary, speak, stopSpeaking, useVoicePrefs } from "./voice.ts";
+import { stopSpeaking, useSpokenReplies, useVoicePrefs } from "./voice.ts";
 
 interface Props {
   ws: Workspace;
@@ -18,43 +18,16 @@ interface Props {
   onMenu: () => void;
   onOpenAgent: (id: string) => void;
   onHire: () => void;
+  onCall: () => void;
 }
 
-export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onOpenAgent, onHire }: Props) {
+export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onOpenAgent, onHire, onCall }: Props) {
   const voice = useVoicePrefs();
-  const agentBusy = messages.some((m) => m.streaming);
   const [dragging, setDragging] = useState(false);
   const [dropped, setDropped] = useState<File[] | null>(null);
 
   // Read agent replies aloud as they finish (only ones that finish while this conversation is open).
-  // Voice in, voice out: after you send a message by voice, replies are spoken until you type again.
-  // Replies are spoken a sentence at a time while they're still being written, so speech starts early.
-  const talkingSince = useRef<number | null>(null);
-  const spokenUpTo = useRef(new Map<string, number>(messages.filter((m) => !m.streaming).map((m) => [m.id, Infinity])));
-  useEffect(() => {
-    for (const m of messages) {
-      if (m.authorKind !== "agent" || m.error) continue;
-      const done = spokenUpTo.current.get(m.id) ?? 0;
-      if (done === Infinity) continue;
-      const replyToVoice = talkingSince.current !== null && m.createdAt >= talkingSince.current;
-      if (!voice.readAloud && !replyToVoice) {
-        if (!m.streaming) spokenUpTo.current.set(m.id, Infinity);
-        continue;
-      }
-      const agentVoice = ws.agents.find((a) => a.id === m.authorId)?.voice;
-      if (m.streaming) {
-        const cut = sentenceBoundary(m.content, done);
-        if (cut > done) {
-          speak(m.content.slice(done, cut), agentVoice);
-          spokenUpTo.current.set(m.id, cut);
-        }
-      } else {
-        const rest = m.content.slice(done);
-        if (rest.trim()) speak(rest, agentVoice);
-        spokenUpTo.current.set(m.id, Infinity);
-      }
-    }
-  }, [messages, voice.readAloud]); // eslint-disable-line react-hooks/exhaustive-deps
+  useSpokenReplies(messages, ws.agents, voice.readAloud);
   useEffect(() => () => stopSpeaking(), [channel.id]);
   const [showMembers, setShowMembers] = useState(false);
   const dmAgent = channel.kind === "dm" ? ws.agents.find((a) => a.id === channel.agentIds[0]) : undefined;
@@ -108,6 +81,11 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
             </span>
           </div>
         )}
+        {dmAgent && (
+          <button className="call-btn" onClick={onCall} title={`Start a voice call with ${dmAgent.name}`}>
+            📞 <span>Call</span>
+          </button>
+        )}
         {channel.kind === "channel" && (
           <button className="members-btn" onClick={() => setShowMembers(true)} title="Agents in this channel">
             <span className="stack">
@@ -154,15 +132,12 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
         dmAgent={dmAgent}
         mode={mode}
         serverModel={serverModel}
-        agentBusy={agentBusy}
         voice={voice}
         onHire={onHire}
         dropped={dropped}
         onDropHandled={() => setDropped(null)}
-        onSent={(byVoice) => {
-          talkingSince.current = byVoice ? Date.now() - 2000 : null;
-          if (!byVoice) stopSpeaking();
-        }}
+        onSent={() => {}}
+        onCall={dmAgent ? onCall : undefined}
       />
       {showMembers && <MembersModal ws={ws} channel={channel} onClose={() => setShowMembers(false)} />}
     </section>

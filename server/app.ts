@@ -75,6 +75,30 @@ export function createApp(store: Store, team: Team, voiceEngine = new VoiceEngin
     res.end(file.data);
   });
 
+  // ---- voice calls -------------------------------------------------------------
+
+  api.post("/calls", (req, res) => {
+    res.status(201).json(store.startCall(String(req.body?.channelId ?? "")));
+  });
+
+  api.post("/calls/:id/end", (req, res) => {
+    res.json({ call: store.endCall(req.params.id) });
+  });
+
+  api.delete("/calls/:id", (req, res) => {
+    store.deleteCall(req.params.id);
+    res.status(204).end();
+  });
+
+  api.get("/calls/:id/transcript.txt", (req, res) => {
+    const call = store.channel(req.params.id);
+    const text = store.transcript(req.params.id);
+    const file = `${call!.name} ${new Date(call!.createdAt).toISOString().slice(0, 10)}.txt`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(file)}`);
+    res.send(text);
+  });
+
   api.post("/channels", (req, res) => {
     const { name, topic, agentIds } = req.body ?? {};
     res.status(201).json(store.createChannel(String(name ?? ""), String(topic ?? ""), Array.isArray(agentIds) ? agentIds : []));

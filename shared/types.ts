@@ -30,12 +30,15 @@ export interface Channel {
   id: string;
   name: string;
   topic: string;
-  kind: "channel" | "dm";
+  kind: "channel" | "dm" | "call";
   humanIds: string[];
   agentIds: string[];
   createdAt: number;
   model?: string; // overrides the workspace default for this conversation
   effort?: Effort;
+  // Voice calls are hidden channels whose messages form the call transcript.
+  parentId?: string; // the DM the call was started from
+  endedAt?: number;
 }
 
 /** A custom voice (a sample for the local voice engine) or one of the computer's built-in voices. */
@@ -72,6 +75,7 @@ export interface Message {
   error?: boolean;
   attachments?: Attachment[];
   viaVoice?: boolean; // a human message that was spoken; the reply will be read aloud
+  callId?: string; // a system note in a chat that links to a call transcript
   model?: string; // model that wrote an agent message
 }
 

@@ -26,6 +26,7 @@ export class Team {
   postHumanMessage(channelId: string, content: string, attachmentIds: string[] = [], opts: { viaVoice?: boolean } = {}) {
     const channel = this.store.channel(channelId);
     if (!channel) throw new Error("Channel not found");
+    if (channel.kind === "call" && channel.endedAt) throw new Error("This call has ended");
     const attachments = attachmentIds.map((id) => {
       const meta = this.store.uploads.meta(id);
       if (!meta) throw new Error("An attachment is missing — try adding it again");
@@ -87,7 +88,9 @@ export class Team {
 
   private responders(channel: Channel, content: string): Agent[] {
     const agents = this.store.workspace.agents;
-    if (channel.kind === "dm") return channel.agentIds.map((id) => this.store.agent(id)).filter((a): a is Agent => !!a);
+    if (channel.kind === "dm" || channel.kind === "call") {
+      return channel.agentIds.map((id) => this.store.agent(id)).filter((a): a is Agent => !!a);
+    }
     const mentioned = findMentionedAgents(content, agents);
     const newcomers = mentioned.filter((a) => !channel.agentIds.includes(a.id));
     if (newcomers.length) this.store.setChannelMembers(channel.id, [...channel.agentIds, ...newcomers.map((a) => a.id)]);
