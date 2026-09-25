@@ -111,9 +111,17 @@ export function speak(markdown: string, voice?: SpeakVoice) {
     if (gen !== generation) return;
     setSpeaking(true);
     try {
-      if (voice?.kind === "custom" && (await engineRunning())) {
-        const ok = await speakWithEngine(text, voice.id, gen);
-        if (ok || gen !== generation) return;
+      if (voice?.kind === "custom") {
+        if (await engineRunning()) {
+          const result = await speakWithEngine(text, voice.id, gen);
+          if (result === "ok" || result === "partial" || gen !== generation) {
+            if (result === "partial") setVoiceNotice("The custom voice stopped partway through that reply (voice engine error).");
+            return;
+          }
+          setVoiceNotice(`Couldn't use the custom voice (${result}), so a built-in voice was used.`);
+        } else {
+          setVoiceNotice("The custom voice engine isn't running, so a built-in voice was used. See the agent's profile → Voice for how to start it.");
+        }
       }
       await speakWithBrowser(text, voice?.kind === "system" ? voice.name : undefined, gen);
     } finally {
@@ -147,8 +155,8 @@ export function chunkText(text: string, max = 280): string[] {
   return chunks.flatMap((c) => (c.length <= 1000 ? [c] : c.match(/[\s\S]{1,1000}/g)!));
 }
 
-/** Plays text in a custom voice. Returns false if the engine can't do it (caller falls back). */
-async function speakWithEngine(text: string, voiceId: string, gen: number): Promise<boolean> {
+/** Plays text in a custom voice: "ok", "partial" (failed after some audio played), or the error message. */
+async function speakWithEngine(text: string, voiceId: string, gen: number): Promise<string> {
   const chunks = chunkText(text);
   const fetchChunk = (chunk: string) => {
     const abort = new AbortController();
@@ -160,23 +168,54 @@ async function speakWithEngine(text: string, voiceId: string, gen: number): Prom
       signal: abort.signal,
     }).then(async (res) => {
       if (res.status === 503) engineUp = false;
-      if (!res.ok) throw new Error(`tts ${res.status}`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `error ${res.status}`);
+      }
       return URL.createObjectURL(await res.blob());
     });
   };
+  let played = 0;
   try {
     let next = fetchChunk(chunks[0]);
     for (let i = 0; i < chunks.length; i++) {
       const url = await next;
-      if (gen !== generation) return true;
+      if (gen !== generation) return "ok";
       if (i + 1 < chunks.length) next = fetchChunk(chunks[i + 1]); // generate ahead while this one plays
       await playUrl(url, gen);
       URL.revokeObjectURL(url);
+      played++;
     }
-    return true;
-  } catch {
-    return false;
+    return "ok";
+  } catch (err) {
+    return played ? "partial" : (err as Error).message;
   }
+}
+
+// ---- notices about which voice was used ------------------------------------------
+
+const noticeListeners = new Set<(n: string | null) => void>();
+function setVoiceNotice(n: string | null) {
+  noticeListeners.forEach((fn) => fn(n));
+}
+
+/** A message explaining why an agent's custom voice wasn't used (cleared after a while). */
+export function useVoiceNotice(): [string | null, () => void] {
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    let timer: number | undefined;
+    const fn = (n: string | null) => {
+      setNotice(n);
+      window.clearTimeout(timer);
+      if (n) timer = window.setTimeout(() => setNotice(null), 12_000);
+    };
+    noticeListeners.add(fn);
+    return () => {
+      noticeListeners.delete(fn);
+      window.clearTimeout(timer);
+    };
+  }, []);
+  return [notice, () => setNotice(null)];
 }
 
 function playUrl(url: string, gen: number): Promise<void> {
@@ -193,11 +232,28 @@ function speakWithBrowser(text: string, voiceName: string | undefined, gen: numb
   if (!speechOutputSupported || gen !== generation) return Promise.resolve();
   return new Promise((resolve) => {
     const u = new SpeechSynthesisUtterance(text);
-    const match = voiceName && window.speechSynthesis.getVoices().find((v) => v.name === voiceName);
+    const voices = window.speechSynthesis.getVoices();
+    const match = (voiceName && voices.find((v) => v.name === voiceName)) || bestNaturalVoice(voices);
     if (match) u.voice = match;
     u.onend = u.onerror = () => resolve();
     window.speechSynthesis.speak(u);
   });
+}
+
+/**
+ * The most natural-sounding built-in voice for the user's language. Apple's downloadable
+ * "Premium" and "Enhanced" voices sound far more human than the compact defaults.
+ */
+export function bestNaturalVoice(voices: Pick<SpeechSynthesisVoice, "name" | "lang" | "default" | "localService">[]) {
+  const lang = (typeof navigator !== "undefined" && navigator.language) || "en-US";
+  const base = lang.split("-")[0];
+  const score = (v: (typeof voices)[number]) =>
+    (v.lang === lang ? 8 : v.lang.startsWith(base) ? 4 : 0) +
+    (/premium/i.test(v.name) ? 6 : /enhanced|neural|natural/i.test(v.name) ? 4 : /^google/i.test(v.name) ? 3 : 0) +
+    (v.default ? 1 : 0) -
+    // novelty voices on macOS
+    (/albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|ralph|kathy/i.test(v.name) ? 20 : 0);
+  return [...voices].sort((a, b) => score(b) - score(a))[0] as SpeechSynthesisVoice | undefined;
 }
 
 // ---- voice engine status --------------------------------------------------------

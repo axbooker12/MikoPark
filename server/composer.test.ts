@@ -203,3 +203,13 @@ describe("read-aloud punctuation", async () => {
     expect(speakableText("Done.\n\n> 💡 Tip here")).toBe("Done. Tip here");
   });
 });
+
+describe("fallback voice choice", async () => {
+  const { bestNaturalVoice } = await import("../web/src/voice.ts");
+  it("prefers Premium/Enhanced voices in the user's language over compact or novelty ones", () => {
+    const v = (name: string, lang = "en-US", isDefault = false) => ({ name, lang, default: isDefault, localService: true });
+    const voices = [v("Samantha", "en-US", true), v("Zarvox"), v("Ava (Premium)"), v("Evan (Enhanced)"), v("Thomas", "fr-FR")];
+    expect(bestNaturalVoice(voices)?.name).toBe("Ava (Premium)");
+    expect(bestNaturalVoice([v("Samantha", "en-US", true), v("Zarvox")])?.name).toBe("Samantha");
+  });
+});

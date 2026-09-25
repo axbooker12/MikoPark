@@ -3,7 +3,7 @@ import { EFFORTS, MODELS, findModel, modelLabel, type Effort } from "../../share
 import type { Agent, Attachment, Channel, Workspace } from "../../shared/types.ts";
 import { api } from "./api.ts";
 import { formatBytes, prepareImage } from "./files.ts";
-import { speechInputSupported, speechOutputSupported, stopSpeaking, useDictation, useSpeaking, type MicMode } from "./voice.ts";
+import { speechInputSupported, speechOutputSupported, stopSpeaking, useDictation, useSpeaking, useVoiceNotice, type MicMode } from "./voice.ts";
 
 interface Props {
   ws: Workspace;
@@ -74,6 +74,7 @@ export function Composer(props: Props) {
   const photoInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const speaking = useSpeaking();
+  const [voiceNotice, clearVoiceNotice] = useVoiceNotice();
 
   useEffect(() => {
     try {
@@ -369,6 +370,14 @@ export function Composer(props: Props) {
         </ul>
       )}
       {flash && <div className={`composer-flash ${flash.error ? "error" : ""}`}>{flash.text}</div>}
+      {voiceNotice && (
+        <div className="composer-flash error" role="status">
+          🔈 {voiceNotice}{" "}
+          <button className="link small" onClick={clearVoiceNotice}>
+            Dismiss
+          </button>
+        </div>
+      )}
       {speaking && (
         <div className="speaking-bar" role="status">
           <span className="dot-typing" aria-hidden /> Speaking…
