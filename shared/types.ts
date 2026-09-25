@@ -18,6 +18,8 @@ export interface Agent {
   instructions: string;
   webSearch: boolean;
   builtIn?: boolean; // the onboarding guide (Benson by default) — cannot be fired
+  disclaimer?: string; // shown under each of this agent's messages (from its template)
+  notice?: string; // shown at the top of conversations this agent is in (from its template)
   hiredAt: number;
 }
 
@@ -71,12 +73,27 @@ export interface AgentTemplate {
   role: string;
   avatar: string;
   color: string;
-  category: string;
+  category: Category | "Built-in";
   tagline: string;
   skills: string[];
   instructions: string;
   webSearch: boolean;
+  disclaimer?: string;
+  notice?: string;
 }
+
+/** Marketplace categories, in display order. A category shows up once it has at least one agent. */
+export const CATEGORIES = [
+  "Marketing",
+  "Sales",
+  "Finance",
+  "Legal",
+  "Operations",
+  "Research & Analytics",
+  "Engineering",
+  "Design",
+] as const;
+export type Category = (typeof CATEGORIES)[number];
 
 export interface Workspace {
   name: string;

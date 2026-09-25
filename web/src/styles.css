@@ -290,7 +290,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 .market-card { border: 1px solid var(--border); border-top: 4px solid; border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .market-card p { margin: 0; color: var(--muted); font-size: 14px; flex: 1; }
 .market-head { display: flex; gap: 10px; align-items: center; }
-.market-head > div { display: flex; flex-direction: column; flex: 1; }
+.market-head > div { display: flex; flex-direction: column; flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .market-head small { color: var(--muted); }
 .skills { display: flex; flex-wrap: wrap; gap: 4px; }
 .skills span { font-size: 12px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 99px; padding: 0 8px; }
@@ -323,3 +323,15 @@ legend { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
   .column { scroll-snap-align: start; }
   .memory-add { flex-direction: column; }
 }
+
+/* ---------- marketplace categories, legal notes ---------- */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 14px; }
+.tabs button { border-radius: 99px; padding: 4px 12px; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+.tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tabs button.active:hover:not(:disabled) { background: var(--accent); }
+.tab-count { font-size: 12px; opacity: 0.7; }
+.market-section + .market-section { margin-top: 18px; }
+.market-heading { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 8px; }
+.skills .note { background: var(--warn-bg); border-color: transparent; }
+.notice { background: var(--warn-bg); border-bottom: 1px solid var(--border); padding: 8px 16px; font-size: 13px; }
+.disclaimer { margin: 6px 0 0; font-size: 12px; color: var(--muted); font-style: italic; }

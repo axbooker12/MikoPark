@@ -4,7 +4,9 @@ import type { Agent, Channel } from "../shared/types.ts";
 import { createApp } from "./app.ts";
 import { DemoBrain, historyFor, runTool, type Brain, type TurnSink } from "./brain.ts";
 import { findMentionedAgents } from "./mentions.ts";
-import { Store, renameLegacyAgents } from "./store.ts";
+import { Store, renameLegacyAgents, syncTemplateNotes } from "./store.ts";
+import { TEMPLATES } from "./templates.ts";
+import { CATEGORIES } from "../shared/types.ts";
 import { Team } from "./team.ts";
 
 /** A brain that replies with a fixed script per agent name, recording who was asked. */
@@ -152,5 +154,30 @@ describe("legacy agent names", () => {
     renameLegacyAgents(store.workspace);
     expect([a.name, b.name, c.name]).toEqual(["ContentWriter", "ContentWriter2", "Linus"]);
     expect(store.workspace.channels.find((ch) => ch.kind === "dm" && ch.agentIds[0] === a.id)!.name).toBe("ContentWriter");
+  });
+});
+
+describe("legal agents and categories", () => {
+  it("hires both legal agents with their disclaimer and confidentiality notice", () => {
+    const store = new Store(null);
+    const counsel = store.hireAgent("legal-counsel");
+    const para = store.hireAgent("paralegal");
+    expect([counsel.name, para.name]).toEqual(["LegalCounsel", "Paralegal"]);
+    for (const a of [counsel, para]) {
+      expect(a.disclaimer).toMatch(/not legal advice/i);
+      expect(a.notice).toMatch(/Confidentiality/);
+    }
+  });
+  it("refreshes notes on saved agents and leaves others without them", () => {
+    const store = new Store(null);
+    const counsel = store.hireAgent("legal-counsel");
+    const writer = store.hireAgent("writer");
+    counsel.disclaimer = "old wording";
+    syncTemplateNotes(store.workspace);
+    expect(counsel.disclaimer).toMatch(/not legal advice/i);
+    expect(writer.disclaimer).toBeUndefined();
+  });
+  it("puts every marketplace agent in a known category", () => {
+    for (const t of TEMPLATES.filter((t) => t.id !== "genny")) expect(CATEGORIES).toContain(t.category);
   });
 });

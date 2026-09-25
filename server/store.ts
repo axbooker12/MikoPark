@@ -99,6 +99,16 @@ export function renameLegacyAgents(ws: Workspace) {
   }
 }
 
+/** Keeps each agent's disclaimer and notice in step with its template, so wording updates reach hired agents. */
+export function syncTemplateNotes(ws: Workspace) {
+  for (const agent of ws.agents) {
+    const t = findTemplate(agent.templateId);
+    if (!t) continue;
+    agent.disclaimer = t.disclaimer;
+    agent.notice = t.notice;
+  }
+}
+
 export class Store extends EventEmitter {
   private db: DB;
   private saveTimer: NodeJS.Timeout | null = null;
@@ -117,6 +127,7 @@ export class Store extends EventEmitter {
         const guide = db.workspace.agents.find((a) => a.builtIn);
         if (guide?.avatar === "🧚") guide.avatar = findTemplate(GENNY_TEMPLATE_ID)!.avatar;
         renameLegacyAgents(db.workspace);
+        syncTemplateNotes(db.workspace);
         return db;
       } catch (err) {
         console.warn(`Could not read ${this.file}, starting fresh:`, err);
@@ -237,6 +248,8 @@ export class Store extends EventEmitter {
       color: t.color,
       instructions: t.instructions,
       webSearch: t.webSearch,
+      disclaimer: t.disclaimer,
+      notice: t.notice,
       hiredAt: Date.now(),
     };
     this.workspace.agents.push(agent);

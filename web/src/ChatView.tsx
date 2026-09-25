@@ -17,6 +17,8 @@ export function ChatView({ ws, channel, messages, onMenu, onOpenAgent }: Props) 
   const [showMembers, setShowMembers] = useState(false);
   const dmAgent = channel.kind === "dm" ? ws.agents.find((a) => a.id === channel.agentIds[0]) : undefined;
   const members = channel.agentIds.map((id) => ws.agents.find((a) => a.id === id)).filter((a): a is Agent => !!a);
+  // Notices from agents in this conversation (e.g. the legal agents' confidentiality statement), without repeats.
+  const notices = [...new Set(members.map((a) => a.notice).filter((n): n is string => !!n))];
 
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -58,6 +60,11 @@ export function ChatView({ ws, channel, messages, onMenu, onOpenAgent }: Props) 
           </button>
         )}
       </header>
+      {notices.map((n) => (
+        <div key={n} className="notice" role="note">
+          🔒 {n}
+        </div>
+      ))}
 
       <div
         className="messages"
@@ -151,6 +158,7 @@ function MessageRow({ ws, channel, message: m, compact, isLatest, onOpenAgent }:
           </div>
         )}
         {m.content ? <Md>{followUp.body}</Md> : null}
+        {agent?.disclaimer && !m.streaming && m.content && <p className="disclaimer">{agent.disclaimer}</p>}
         {followUp.topic && agent && (
           <FollowUp topic={followUp.topic} active={isLatest} onYes={() => api.send(channel.id, followUpRequest(followUp.topic!, agent.name, channel.kind === "channel"))} />
         )}
