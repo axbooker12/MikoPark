@@ -253,7 +253,12 @@ export class ClaudeBrain implements Brain {
     const { stable, context } = systemPrompt(this.store, agent, channel);
     const tools: BetaToolUnion[] = [...TOOLS];
     if (agent.builtIn) tools.push(...HIRING_TOOLS);
-    if (agent.webSearch) tools.push({ type: "web_search_20260209", name: "web_search", max_uses: 5 });
+    if (agent.webSearch) {
+      tools.push(
+        { type: "web_search_20260209", name: "web_search", max_uses: 5 },
+        { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 },
+      );
+    }
 
     const messages = historyFor(this.store, agent, channel, extra);
     let wroteText = false;
@@ -335,6 +340,7 @@ const KEYWORDS: Record<string, string[]> = {
   designer: ["design", "deck", "slides", "ux", "wireframe", "landing"],
   pm: ["plan", "project", "roadmap", "tasks", "deadline", "organize"],
   sales: ["sales", "outreach", "leads", "prospect", "customers", "pitch"],
+  "search-strategist": ["seo", "search", "ranking", "google", "traffic", "chatgpt", "perplexity"],
 };
 
 export class DemoBrain implements Brain {

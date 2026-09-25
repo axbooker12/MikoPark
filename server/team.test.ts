@@ -129,3 +129,13 @@ describe("HTTP API", () => {
     expect((await request(app).delete("/api/agents/a_genny")).status).toBe(400);
   });
 });
+
+describe("marketplace templates", () => {
+  it("hires the Search Engine Strategist under its role name, with web access", () => {
+    const store = new Store(null);
+    const a = store.hireAgent("search-strategist");
+    expect(a).toMatchObject({ name: "SearchEngineStrategist", role: "Search Engine Strategist", webSearch: true });
+    expect(a.instructions).toContain("Never apologize");
+    expect(findMentionedAgents("@searchenginestrategist audit this", store.workspace.agents)).toEqual([a]);
+  });
+});

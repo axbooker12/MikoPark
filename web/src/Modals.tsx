@@ -46,7 +46,7 @@ export function MarketplaceModal({ ws, onClose, onHired }: { ws: Workspace; onCl
                 {t.skills.map((s) => (
                   <span key={s}>{s}</span>
                 ))}
-                {t.webSearch && <span className="web">🌐 Web search</span>}
+                {t.webSearch && <span className="web">🌐 Web access</span>}
               </div>
               <button className={count ? "" : "primary"} disabled={busy !== null} onClick={() => void hire(t)}>
                 {busy === t.id ? "Hiring…" : count ? `Hire another (${count} on team)` : "Hire"}
@@ -201,7 +201,7 @@ export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; age
           <textarea rows={6} value={instructions} onChange={(e) => setInstructions(e.target.value)} />
         </label>
         <label className="check">
-          <input type="checkbox" checked={webSearch} onChange={(e) => setWebSearch(e.target.checked)} /> Can search the web
+          <input type="checkbox" checked={webSearch} onChange={(e) => setWebSearch(e.target.checked)} /> Can search the web and read pages
         </label>
         {error && <p className="form-error">{error}</p>}
         <div className="row">
