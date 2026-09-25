@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatView } from "./ChatView.tsx";
 import { MemoryView } from "./MemoryView.tsx";
-import { AgentProfileModal, MarketplaceModal, NewChannelModal } from "./Modals.tsx";
+import { AgentProfileModal, DepartmentsModal, NewChannelModal } from "./Modals.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { TasksView } from "./TasksView.tsx";
 import { useWorkspace } from "./useWorkspace.ts";
@@ -95,7 +95,7 @@ export function App() {
         )}
       </main>
       {modal?.kind === "hire" && (
-        <MarketplaceModal
+        <DepartmentsModal
           ws={ws}
           onClose={() => setModal(null)}
           onHired={(agentId) => {

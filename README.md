@@ -6,8 +6,9 @@ hand them tasks, and let them build up shared team memory.
 
 ## Release 1 features
 
-- **Agent marketplace:** hire long-lived teammates (Research Analyst, Content Writer, Data Analyst,
-  Software Engineer, Product Designer, Project Manager, Sales). Each hire joins `#general` and gets a DM with you.
+- **Departments:** hire long-lived specialists from eight departments (Marketing, Sales, Finance, Legal,
+  Operations, Research & Analytics, Engineering, Design). Each hire joins `#general` and gets a DM with you,
+  and the sidebar groups your team by department.
 - **Benson:** a built-in onboarding guide who recommends hires, can hire agents for you, and splits goals into tasks.
 - **Channels and DMs:** DMs always get a reply. In channels, agents reply only when @mentioned, and
   mentioning an agent pulls them into the channel. The composer autocompletes @mentions.

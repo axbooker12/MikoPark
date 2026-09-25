@@ -163,6 +163,7 @@ describe("legal agents and categories", () => {
     const counsel = store.hireAgent("legal-counsel");
     const para = store.hireAgent("paralegal");
     expect([counsel.name, para.name]).toEqual(["LegalCounsel", "Paralegal"]);
+    expect([counsel.category, para.category, store.workspace.agents[0].category]).toEqual(["Legal", "Legal", "Leadership"]);
     for (const a of [counsel, para]) {
       expect(a.disclaimer).toMatch(/not legal advice/i);
       expect(a.notice).toMatch(/Confidentiality/);

@@ -34,6 +34,7 @@ function seed(): DB {
     color: genny.color,
     instructions: genny.instructions,
     webSearch: genny.webSearch,
+    category: genny.category,
     builtIn: true,
     hiredAt: Date.now(),
   };
@@ -105,6 +106,7 @@ export function syncTemplateNotes(ws: Workspace) {
     const t = findTemplate(agent.templateId);
     if (!t) continue;
     agent.color = t.color;
+    agent.category = t.category;
     agent.disclaimer = t.disclaimer;
     agent.notice = t.notice;
   }
@@ -249,6 +251,7 @@ export class Store extends EventEmitter {
       color: t.color,
       instructions: t.instructions,
       webSearch: t.webSearch,
+      category: t.category,
       disclaimer: t.disclaimer,
       notice: t.notice,
       hiredAt: Date.now(),

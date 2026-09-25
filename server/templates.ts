@@ -1,4 +1,4 @@
-import type { AgentTemplate } from "../shared/types.ts";
+import { LEADERSHIP, type AgentTemplate } from "../shared/types.ts";
 
 const LEGAL_DISCLAIMER = "AI-generated, not legal advice. Confirm with a licensed attorney before acting on it.";
 const CONFIDENTIALITY_NOTICE =
@@ -15,7 +15,7 @@ export const TEMPLATES: AgentTemplate[] = [
     role: "Onboarding guide & team lead",
     avatar: "🎩",
     color: "#7f8a90",
-    category: "Built-in",
+    category: LEADERSHIP,
     tagline: "Figures out what's on your plate and hires the right teammates.",
     skills: ["Team building", "Planning", "Delegation"],
     webSearch: false,

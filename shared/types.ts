@@ -18,6 +18,7 @@ export interface Agent {
   instructions: string;
   webSearch: boolean;
   builtIn?: boolean; // the onboarding guide (Benson by default) — cannot be fired
+  category?: string; // department, from its template
   disclaimer?: string; // shown under each of this agent's messages (from its template)
   notice?: string; // shown at the top of conversations this agent is in (from its template)
   hiredAt: number;
@@ -73,7 +74,7 @@ export interface AgentTemplate {
   role: string;
   avatar: string;
   color: string;
-  category: Category | "Built-in";
+  category: Category | typeof LEADERSHIP;
   tagline: string;
   skills: string[];
   instructions: string;
@@ -94,6 +95,21 @@ export const CATEGORIES = [
   "Design",
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
+
+/** Department for the built-in guide; it isn't hireable, so it isn't in CATEGORIES. */
+export const LEADERSHIP = "Leadership";
+
+export const DEPARTMENT_ICONS: Record<string, string> = {
+  Leadership: "🎩",
+  Marketing: "📣",
+  Sales: "🤝",
+  Finance: "💰",
+  Legal: "⚖️",
+  Operations: "⚙️",
+  "Research & Analytics": "🔬",
+  Engineering: "🛠️",
+  Design: "🎨",
+};
 
 export interface Workspace {
   name: string;

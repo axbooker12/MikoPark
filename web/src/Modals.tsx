@@ -1,32 +1,39 @@
 import { useEffect, useState } from "react";
-import { CATEGORIES, type AgentTemplate, type Channel, type Workspace } from "../../shared/types.ts";
+import { CATEGORIES, DEPARTMENT_ICONS, type AgentTemplate, type Channel, type Workspace } from "../../shared/types.ts";
 import { api } from "./api.ts";
 import { Avatar, Modal } from "./ui.tsx";
 
-export function MarketplaceModal({ ws, onClose, onHired }: { ws: Workspace; onClose: () => void; onHired: (agentId: string) => void }) {
+const DEPT_KEY = "mikopark:department";
+
+export function DepartmentsModal({ ws, onClose, onHired }: { ws: Workspace; onClose: () => void; onHired: (agentId: string) => void }) {
   const [templates, setTemplates] = useState<AgentTemplate[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [category, setCategory] = useState<string>(() => {
+  const [picked, setPicked] = useState<string | null>(() => {
     try {
-      return localStorage.getItem("mikopark:market-category") ?? "All";
+      return localStorage.getItem(DEPT_KEY);
     } catch {
-      return "All";
+      return null;
     }
   });
-
-  const pickCategory = (c: string) => {
-    setCategory(c);
-    try {
-      localStorage.setItem("mikopark:market-category", c);
-    } catch {
-      // storage unavailable — the tab just won't be remembered
-    }
-  };
 
   useEffect(() => {
     api.templates().then(setTemplates, (e) => setError((e as Error).message));
   }, []);
+
+  const inDept = (d: string) => templates?.filter((t) => t.category === d) ?? [];
+  const onTeam = (t: AgentTemplate) => ws.agents.filter((a) => a.templateId === t.id).length;
+  // Open the remembered department, else the first one that has specialists.
+  const current = picked && inDept(picked).length ? picked : CATEGORIES.find((d) => inDept(d).length) ?? null;
+
+  const pick = (d: string) => {
+    setPicked(d);
+    try {
+      localStorage.setItem(DEPT_KEY, d);
+    } catch {
+      // storage unavailable — the department just won't be remembered
+    }
+  };
 
   const hire = async (t: AgentTemplate) => {
     setBusy(t.id);
@@ -39,61 +46,102 @@ export function MarketplaceModal({ ws, onClose, onHired }: { ws: Workspace; onCl
     }
   };
 
-  // Categories that have at least one agent, in the canonical order.
-  const present = CATEGORIES.filter((c) => templates?.some((t) => t.category === c));
-  const tabs = ["All", ...present];
-  const active = tabs.includes(category) ? category : "All";
-  const groups = present
-    .filter((c) => active === "All" || c === active)
-    .map((c) => [c, templates!.filter((t) => t.category === c)] as const);
+  const list = current ? inDept(current) : [];
+  const hasLegalNotes = list.some((t) => t.notice && t.disclaimer);
 
   return (
-    <Modal title="Hire agents" onClose={onClose} wide>
-      <p className="muted">Each hire is a long-term teammate with its own role. It joins #general and gets a DM with you.</p>
+    <Modal title="Departments" onClose={onClose} wide>
+      <p className="muted dept-intro">Walk the floor and bring specialists onto your team. Each one joins #general and gets a DM with you.</p>
       {error && <p className="form-error">{error}</p>}
-      {!templates && !error && <p className="muted">Loading marketplace…</p>}
+      {!templates && !error && <p className="muted">Loading departments…</p>}
       {templates && (
-        <div className="tabs" role="tablist" aria-label="Categories">
-          {tabs.map((c) => (
-            <button key={c} role="tab" aria-selected={active === c} className={active === c ? "active" : ""} onClick={() => pickCategory(c)}>
-              {c}
-              <span className="tab-count">{c === "All" ? templates.length : templates.filter((t) => t.category === c).length}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      {groups.map(([cat, list]) => (
-        <section key={cat} className="market-section">
-          {active === "All" && <h3 className="market-heading">{cat}</h3>}
-          <div className="market">
-            {list.map((t) => {
-              const count = ws.agents.filter((a) => a.templateId === t.id).length;
+        <>
+          <div className="floor" role="tablist" aria-label="Departments">
+            {CATEGORIES.map((d, i) => {
+              const specialists = inDept(d);
+              const hired = specialists.filter((t) => onTeam(t) > 0).length;
               return (
-                <article key={t.id} className="market-card" style={{ borderTopColor: t.color }}>
-                  <div className="market-head">
-                    <Avatar emoji={t.avatar} color={t.color} size={40} />
-                    <div>
-                      <strong>{t.name}</strong>
-                      <small>{t.role}</small>
-                    </div>
-                  </div>
-                  <p>{t.tagline}</p>
-                  <div className="skills">
-                    {t.skills.map((s) => (
-                      <span key={s}>{s}</span>
+                <button
+                  key={d}
+                  role="tab"
+                  aria-selected={d === current}
+                  disabled={!specialists.length}
+                  className={`tile ${d === current ? "on" : ""} ${specialists.length ? "" : "empty"}`}
+                  onClick={() => pick(d)}
+                >
+                  <span className="door">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="tile-icon" aria-hidden>
+                    {DEPARTMENT_ICONS[d]}
+                  </span>
+                  <strong>{d === "Research & Analytics" ? "Research" : d}</strong>
+                  <small>
+                    {specialists.length ? `${specialists.length} specialist${specialists.length === 1 ? "" : "s"}` : "Coming soon"}
+                  </small>
+                  <span className="occupancy" aria-label={`${hired} of ${specialists.length} on your team`}>
+                    {specialists.map((t, k) => (
+                      <i key={t.id} className={k < hired ? "filled" : ""} />
                     ))}
-                    {t.webSearch && <span className="web">🌐 Web access</span>}
-                    {t.disclaimer && <span className="note">⚖️ Not legal advice</span>}
-                  </div>
-                  <button className={count ? "" : "primary"} disabled={busy !== null} onClick={() => void hire(t)}>
-                    {busy === t.id ? "Hiring…" : count ? `Hire another (${count} on team)` : "Hire"}
-                  </button>
-                </article>
+                  </span>
+                </button>
               );
             })}
           </div>
-        </section>
-      ))}
+
+          {current && (
+            <section className="dept-panel" role="tabpanel" aria-label={`${current} department`}>
+              <div className="dept-head">
+                <h3>
+                  <span aria-hidden>{DEPARTMENT_ICONS[current]}</span> {current} department
+                </h3>
+                <span className="muted">
+                  {list.filter((t) => onTeam(t) > 0).length} of {list.length} on your team
+                </span>
+              </div>
+              {hasLegalNotes && (
+                <div className="dept-note">
+                  🔒 Agents in this department show a confidentiality notice in their conversations, and a not-legal-advice line under every
+                  reply.
+                </div>
+              )}
+              {list.map((t) => {
+                const count = onTeam(t);
+                return (
+                  <article key={t.id} className="desk">
+                    <Avatar emoji={t.avatar} color={t.color} size={48} />
+                    <div className="desk-name">
+                      <strong>{t.name}</strong>
+                      <small>{t.role}</small>
+                    </div>
+                    <div className="desk-about">
+                      <p>{t.tagline}</p>
+                      <div className="skills">
+                        {t.skills.map((sk) => (
+                          <span key={sk}>{sk}</span>
+                        ))}
+                        {t.webSearch && <span className="web">🌐 Web access</span>}
+                      </div>
+                    </div>
+                    <div className="desk-action">
+                      {count > 0 ? (
+                        <>
+                          <span className="on-team">✓ On your team{count > 1 ? ` (${count})` : ""}</span>
+                          <button className="link small" disabled={busy !== null} onClick={() => void hire(t)}>
+                            {busy === t.id ? "Adding…" : "Bring on another"}
+                          </button>
+                        </>
+                      ) : (
+                        <button className="primary" disabled={busy !== null} onClick={() => void hire(t)}>
+                          {busy === t.id ? "Bringing on…" : "Bring on"}
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
+          )}
+        </>
+      )}
     </Modal>
   );
 }

@@ -1,4 +1,5 @@
-import type { Message, Workspace } from "../../shared/types.ts";
+import { useState } from "react";
+import { CATEGORIES, DEPARTMENT_ICONS, LEADERSHIP, type Agent, type Channel, type Message, type Workspace } from "../../shared/types.ts";
 import type { View } from "./App.tsx";
 import { Avatar } from "./ui.tsx";
 
@@ -13,7 +14,25 @@ interface Props {
 
 export function Sidebar({ ws, view, messages, onGo, onHire, onNewChannel }: Props) {
   const channels = ws.channels.filter((c) => c.kind === "channel");
-  const dms = ws.channels.filter((c) => c.kind === "dm");
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? "[]") as string[]);
+    } catch {
+      return new Set();
+    }
+  });
+  const toggle = (dept: string) => {
+    const next = new Set(collapsed);
+    if (next.has(dept)) next.delete(dept);
+    else next.add(dept);
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...next]));
+    } catch {
+      // storage unavailable — collapsing just won't be remembered
+    }
+  };
+  const departments = teamByDepartment(ws);
   const openTasks = ws.tasks.filter((t) => t.status !== "done").length;
   const isOpen = (id: string) => view.kind === "channel" && view.id === id;
   const busy = (channelId: string) => (messages[channelId] ?? []).some((m) => m.streaming);
@@ -28,7 +47,7 @@ export function Sidebar({ ws, view, messages, onGo, onHire, onNewChannel }: Prop
       </div>
 
       <button className="hire-btn" onClick={onHire}>
-        ＋ Hire agents
+        ＋ Visit departments
       </button>
 
       <div className="nav-group">
@@ -57,25 +76,59 @@ export function Sidebar({ ws, view, messages, onGo, onHire, onNewChannel }: Prop
         ))}
       </div>
 
-      <div className="nav-heading">Direct messages</div>
-      <div className="nav-group">
-        {dms.map((c) => {
-          const agent = ws.agents.find((a) => a.id === c.agentIds[0]);
-          if (!agent) return null;
-          return (
-            <button key={c.id} className={`nav-item ${isOpen(c.id) ? "active" : ""}`} onClick={() => onGo({ kind: "channel", id: c.id })}>
-              <Avatar emoji={agent.avatar} color={agent.color} size={20} />
-              <span className="dm-name">{agent.name}</span>
-              <span className="dm-role">{agent.role}</span>
-              {busy(c.id) && <span className="dot-typing" aria-label="agent working" />}
+      <div className="nav-heading">Your team</div>
+      {departments.map(([dept, members]) => {
+        const closed = collapsed.has(dept);
+        const working = members.some(([, c]) => busy(c.id));
+        return (
+          <div key={dept} className="nav-group dept-group">
+            <button className="dept-toggle" onClick={() => toggle(dept)} aria-expanded={!closed}>
+              <span aria-hidden>{DEPARTMENT_ICONS[dept] ?? "•"}</span>
+              <span className="dept-label">{dept}</span>
+              {closed && working && <span className="dot-typing" aria-label="agent working" />}
+              <span className="dept-count">{members.length}</span>
+              <span className={`chev ${closed ? "closed" : ""}`} aria-hidden>
+                ▾
+              </span>
             </button>
-          );
-        })}
-      </div>
+            {members
+              // A collapsed department still shows the conversation you're in.
+              .filter(([, c]) => !closed || isOpen(c.id))
+              .map(([agent, c]) => (
+                <button key={c.id} className={`nav-item ${isOpen(c.id) ? "active" : ""}`} onClick={() => onGo({ kind: "channel", id: c.id })}>
+                  <Avatar emoji={agent.avatar} color={agent.color} size={20} />
+                  <span className="dm-name">{agent.name}</span>
+                  {agent.name.toLowerCase() !== agent.role.replace(/[^a-z0-9]/gi, "").toLowerCase() && (
+                    <span className="dm-role">{agent.role}</span>
+                  )}
+                  {busy(c.id) && <span className="dot-typing" aria-label="agent working" />}
+                </button>
+              ))}
+          </div>
+        );
+      })}
 
       <div className="sidebar-foot">
         <Avatar emoji={ws.me.avatar} size={24} /> {ws.me.name}
       </div>
     </nav>
   );
+}
+
+const COLLAPSE_KEY = "mikopark:collapsed-departments";
+
+/** Hired agents with their DM, grouped by department: Leadership first, then the marketplace order. */
+function teamByDepartment(ws: Workspace): [string, [Agent, Channel][]][] {
+  const order: string[] = [LEADERSHIP, ...CATEGORIES];
+  const groups = new Map<string, [Agent, Channel][]>();
+  for (const c of ws.channels) {
+    if (c.kind !== "dm") continue;
+    const agent = ws.agents.find((a) => a.id === c.agentIds[0]);
+    if (!agent) continue;
+    const dept = agent.category ?? "Other";
+    if (!groups.has(dept)) groups.set(dept, []);
+    groups.get(dept)!.push([agent, c]);
+  }
+  const rank = (d: string) => (order.includes(d) ? order.indexOf(d) : order.length);
+  return [...groups.entries()].sort(([a], [b]) => rank(a) - rank(b));
 }
