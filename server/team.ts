@@ -58,7 +58,8 @@ export class Team {
     const brief =
       `You've been assigned task ${task.id}: "${task.title}".` +
       (task.description ? `\nDetails: ${task.description}` : "") +
-      `\nDo the work now and post the finished deliverable in this reply. When you're done, call update_task with status "review" and a one-line result.`;
+      `\nDo the work now and post the finished deliverable in this reply. This is a task deliverable, so the chat length limit and the "more information" line don't apply: make it complete. ` +
+      `When you're done, call update_task with status "review" and a one-line result.`;
     return this.schedule(agent, channel, 0, brief).then(() => {
       const t = this.store.task(task.id);
       if (t && t.status === "in_progress") {

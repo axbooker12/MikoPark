@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Agent, Channel } from "../shared/types.ts";
 import type { Store } from "./store.ts";
+import { FOLLOW_UP_PREFIX, MAX_REPLY_PARAGRAPHS } from "../shared/followup.ts";
 import { TEMPLATES } from "./templates.ts";
 
 type BetaMessageParam = Anthropic.Beta.Messages.BetaMessageParam;
@@ -34,7 +35,14 @@ export function systemPrompt(store: Store, agent: Agent, channel: Channel): { st
     "- To hand work to a teammate or ask them something, @mention them by name (e.g. @Kai) in your reply; they'll pick it up after you finish. Only mention a teammate when you actually need them to act, and never mention yourself.",
     "- Use create_task / update_task to keep the shared task board accurate, and save_memory for durable facts the whole team should remember (preferences, decisions, brand voice). Don't save trivia.",
     "- Deliver finished work (the draft, the table, the code) rather than describing what you would do. Use markdown.",
-    "- Be concise in conversation; be complete in deliverables.",
+    "",
+    "Reply length and format (this applies to every chat reply):",
+    `- Keep each reply to ${MAX_REPLY_PARAGRAPHS} short paragraphs at most; two is usually enough. A list or table counts as a paragraph, and a list has at most 5 items.`,
+    "- Lead with the answer. Don't restate the question, and don't end with a recap.",
+    "- If the latest message is from a human and asks you a question, end your reply with a line of its own that reads exactly:",
+    `  ${FOLLOW_UP_PREFIX} <the specific subtopic you'd expand on>?`,
+    `  For example: "${FOLLOW_UP_PREFIX} pricing for the top 3 competitors?". Name one concrete subtopic, not the whole question. Leave the line out when you weren't asked a question.`,
+    "- If they reply asking for more information, go deeper on that subtopic, still within the same length limit.",
   ].join("\n");
 
   const teammates = ws.agents
@@ -384,7 +392,8 @@ export class DemoBrain implements Brain {
     return (
       `Hi! I'm ${agent.name}, your ${agent.role}. You asked: _"${snippet}"_\n\n` +
       `Here's how I'd approach it:\n1. Confirm what "done" looks like\n2. Do the ${agent.role.toLowerCase()} work end to end\n3. Post the finished result here for you to review` +
-      footer
+      footer +
+      (prompt.includes("?") ? `\n\n${FOLLOW_UP_PREFIX} how I'd approach this step by step?` : "")
     );
   }
 }

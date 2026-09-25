@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Agent, Channel, Message, Workspace } from "../../shared/types.ts";
+import { followUpRequest, splitFollowUp } from "../../shared/followup.ts";
 import { api } from "./api.ts";
 import { MembersModal } from "./Modals.tsx";
 import { Avatar, Md, clock } from "./ui.tsx";
@@ -68,7 +69,15 @@ export function ChatView({ ws, channel, messages, onMenu, onOpenAgent }: Props) 
       >
         {messages.length === 0 && <EmptyChannel channel={channel} members={members} />}
         {messages.map((m, i) => (
-          <MessageRow key={m.id} ws={ws} message={m} compact={isContinuation(messages[i - 1], m)} onOpenAgent={onOpenAgent} />
+          <MessageRow
+            key={m.id}
+            ws={ws}
+            channel={channel}
+            message={m}
+            compact={isContinuation(messages[i - 1], m)}
+            isLatest={i === messages.length - 1}
+            onOpenAgent={onOpenAgent}
+          />
         ))}
       </div>
 
@@ -97,7 +106,16 @@ function EmptyChannel({ channel, members }: { channel: Channel; members: Agent[]
   );
 }
 
-function MessageRow({ ws, message: m, compact, onOpenAgent }: { ws: Workspace; message: Message; compact: boolean; onOpenAgent: (id: string) => void }) {
+interface RowProps {
+  ws: Workspace;
+  channel: Channel;
+  message: Message;
+  compact: boolean;
+  isLatest: boolean;
+  onOpenAgent: (id: string) => void;
+}
+
+function MessageRow({ ws, channel, message: m, compact, isLatest, onOpenAgent }: RowProps) {
   if (m.authorKind === "system") {
     return (
       <div className="msg system">
@@ -109,6 +127,8 @@ function MessageRow({ ws, message: m, compact, onOpenAgent }: { ws: Workspace; m
   const human = m.authorKind === "human" ? ws.humans.find((h) => h.id === m.authorId) : undefined;
   const name = agent?.name ?? human?.name ?? "Former teammate";
   const avatar = agent?.avatar ?? human?.avatar ?? "👤";
+  // While a reply is still streaming, its last line may be a half-written follow-up; wait until it's done.
+  const followUp = agent && !m.streaming ? splitFollowUp(m.content) : { body: m.content, topic: null };
 
   return (
     <div className={`msg ${compact ? "compact" : ""} ${m.error ? "error" : ""}`}>
@@ -130,13 +150,43 @@ function MessageRow({ ws, message: m, compact, onOpenAgent }: { ws: Workspace; m
             <time>{clock(m.createdAt)}</time>
           </div>
         )}
-        {m.content ? <Md>{m.content}</Md> : null}
+        {m.content ? <Md>{followUp.body}</Md> : null}
+        {followUp.topic && agent && (
+          <FollowUp topic={followUp.topic} active={isLatest} onYes={() => api.send(channel.id, followUpRequest(followUp.topic!, agent.name, channel.kind === "channel"))} />
+        )}
         {m.streaming && (
           <div className="working">
             <span className="dot-typing" /> {m.status ?? (m.content ? "" : "Working…")}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function FollowUp({ topic, active, onYes }: { topic: string; active: boolean; onYes: () => Promise<unknown> }) {
+  const [state, setState] = useState<"idle" | "sending" | "error">("idle");
+  return (
+    <div className={`follow-up ${active ? "" : "past"}`}>
+      <span>
+        Would you like more information: <strong>{topic}</strong>?
+      </span>
+      {active && (
+        <button
+          className="primary small"
+          disabled={state === "sending"}
+          onClick={() => {
+            setState("sending");
+            onYes().then(
+              () => setState("idle"),
+              () => setState("error"),
+            );
+          }}
+        >
+          {state === "sending" ? "Asking…" : "Yes, tell me more"}
+        </button>
+      )}
+      {state === "error" && <span className="form-error">Couldn't send — try again.</span>}
     </div>
   );
 }
