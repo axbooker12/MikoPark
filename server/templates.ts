@@ -8,7 +8,7 @@ export const TEMPLATES: AgentTemplate[] = [
     id: GENNY_TEMPLATE_ID,
     name: "Benson",
     role: "Onboarding guide & team lead",
-    avatar: "🧚",
+    avatar: "🎩",
     color: "#8b5cf6",
     category: "Built-in",
     tagline: "Figures out what's on your plate and hires the right teammates.",

@@ -96,7 +96,11 @@ export class Store extends EventEmitter {
   private load(): DB {
     if (this.file && fs.existsSync(this.file)) {
       try {
-        return JSON.parse(fs.readFileSync(this.file, "utf8")) as DB;
+        const db = JSON.parse(fs.readFileSync(this.file, "utf8")) as DB;
+        // Workspaces saved before the guide became Benson still carry Genny's fairy avatar.
+        const guide = db.workspace.agents.find((a) => a.builtIn);
+        if (guide?.avatar === "🧚") guide.avatar = findTemplate(GENNY_TEMPLATE_ID)!.avatar;
+        return db;
       } catch (err) {
         console.warn(`Could not read ${this.file}, starting fresh:`, err);
       }
