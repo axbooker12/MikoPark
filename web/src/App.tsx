@@ -89,8 +89,11 @@ export function App() {
             ws={ws}
             channel={channel}
             messages={state.messages[channel.id] ?? []}
+            mode={state.mode}
+            serverModel={state.serverModel}
             onMenu={() => setNavOpen(true)}
             onOpenAgent={openAgent}
+            onHire={() => setModal({ kind: "hire" })}
           />
         )}
       </main>

@@ -1,19 +1,41 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Agent, Channel, Message, Workspace } from "../../shared/types.ts";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { modelLabel } from "../../shared/models.ts";
+import type { Agent, Attachment, Channel, Message, Workspace } from "../../shared/types.ts";
 import { followUpRequest, splitFollowUp } from "../../shared/followup.ts";
 import { api } from "./api.ts";
 import { MembersModal } from "./Modals.tsx";
+import { Composer, iconFor } from "./Composer.tsx";
+import { formatBytes } from "./files.ts";
 import { Avatar, Md, clock } from "./ui.tsx";
+import { speak, stopSpeaking, useVoicePrefs } from "./voice.ts";
 
 interface Props {
   ws: Workspace;
   channel: Channel;
   messages: Message[];
+  mode: "live" | "demo";
+  serverModel: string;
   onMenu: () => void;
   onOpenAgent: (id: string) => void;
+  onHire: () => void;
 }
 
-export function ChatView({ ws, channel, messages, onMenu, onOpenAgent }: Props) {
+export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onOpenAgent, onHire }: Props) {
+  const voice = useVoicePrefs();
+  const agentBusy = messages.some((m) => m.streaming);
+  const [dragging, setDragging] = useState(false);
+  const [dropped, setDropped] = useState<File[] | null>(null);
+
+  // Read agent replies aloud as they finish (only ones that finish while this conversation is open).
+  const spoken = useRef(new Set(messages.filter((m) => !m.streaming).map((m) => m.id)));
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.streaming || spoken.current.has(m.id)) continue;
+      spoken.current.add(m.id);
+      if (voice.readAloud && m.authorKind === "agent" && m.content && !m.error) speak(m.content);
+    }
+  }, [messages, voice.readAloud]);
+  useEffect(() => () => stopSpeaking(), [channel.id]);
   const [showMembers, setShowMembers] = useState(false);
   const dmAgent = channel.kind === "dm" ? ws.agents.find((a) => a.id === channel.agentIds[0]) : undefined;
   const members = channel.agentIds.map((id) => ws.agents.find((a) => a.id === id)).filter((a): a is Agent => !!a);
@@ -28,7 +50,24 @@ export function ChatView({ ws, channel, messages, onMenu, onOpenAgent }: Props) 
   }, [messages]);
 
   return (
-    <section className="chat">
+    <section
+      className={`chat ${dragging ? "dragging" : ""}`}
+      onDragOver={(e) => {
+        if (![...e.dataTransfer.types].includes("Files")) return;
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        setDragging(false);
+        setDropped([...e.dataTransfer.files]);
+      }}
+    >
+      {dragging && <div className="drop-overlay">Drop files to attach</div>}
       <header className="chat-header">
         <button className="icon-btn menu-btn" onClick={onMenu} aria-label="Open navigation">
           ☰
@@ -88,7 +127,19 @@ export function ChatView({ ws, channel, messages, onMenu, onOpenAgent }: Props) 
         ))}
       </div>
 
-      <Composer ws={ws} channel={channel} members={members} dmAgent={dmAgent} />
+      <Composer
+        ws={ws}
+        channel={channel}
+        members={members}
+        dmAgent={dmAgent}
+        mode={mode}
+        serverModel={serverModel}
+        agentBusy={agentBusy}
+        voice={voice}
+        onHire={onHire}
+        dropped={dropped}
+        onDropHandled={() => setDropped(null)}
+      />
       {showMembers && <MembersModal ws={ws} channel={channel} onClose={() => setShowMembers(false)} />}
     </section>
   );
@@ -155,9 +206,11 @@ function MessageRow({ ws, channel, message: m, compact, isLatest, onOpenAgent }:
             <strong style={agent ? { color: agent.color } : undefined}>{name}</strong>
             {agent && <span className="badge">AI · {agent.role}</span>}
             <time>{clock(m.createdAt)}</time>
+            {m.model && <span className="msg-model">{modelLabel(m.model)}</span>}
           </div>
         )}
         {m.content ? <Md>{followUp.body}</Md> : null}
+        {m.attachments?.length ? <Attachments items={m.attachments} /> : null}
         {agent?.disclaimer && !m.streaming && m.content && <p className="disclaimer">{agent.disclaimer}</p>}
         {followUp.topic && agent && (
           <FollowUp topic={followUp.topic} active={isLatest} onYes={() => api.send(channel.id, followUpRequest(followUp.topic!, agent.name, channel.kind === "channel"))} />
@@ -199,131 +252,50 @@ function FollowUp({ topic, active, onYes }: { topic: string; active: boolean; on
   );
 }
 
-function Composer({ ws, channel, members, dmAgent }: { ws: Workspace; channel: Channel; members: Agent[]; dmAgent?: Agent }) {
-  const draftKey = `mikopark:draft:${channel.id}`;
-  const [text, setText] = useState(() => {
-    try {
-      return localStorage.getItem(draftKey) ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  const [menuIndex, setMenuIndex] = useState(0);
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(draftKey, text);
-    } catch {
-      // storage unavailable — drafts just won't persist
-    }
-  }, [draftKey, text]);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-  }, [text]);
-
-  // @mention autocomplete: look at the word right before the caret.
-  const mentionQuery = useMemo(() => {
-    const el = ref.current;
-    const caret = el?.selectionStart ?? text.length;
-    const m = /(^|\s)@([\w-]*)$/.exec(text.slice(0, caret));
-    return m ? m[2].toLowerCase() : null;
-  }, [text]);
-  const suggestions = useMemo(() => {
-    if (mentionQuery === null || channel.kind === "dm") return [];
-    const inChannel = new Set(members.map((a) => a.id));
-    return [...ws.agents]
-      .sort((a, b) => Number(inChannel.has(b.id)) - Number(inChannel.has(a.id)))
-      .filter((a) => a.name.toLowerCase().startsWith(mentionQuery))
-      .slice(0, 6);
-  }, [mentionQuery, ws.agents, members, channel.kind]);
-
-  const pick = (agent: Agent) => {
-    const el = ref.current!;
-    const caret = el.selectionStart ?? text.length;
-    const before = text.slice(0, caret).replace(/@[\w-]*$/, `@${agent.name} `);
-    const next = before + text.slice(caret);
-    setText(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(before.length, before.length);
-    });
-  };
-
-  const send = async () => {
-    const content = text.trim();
-    if (!content || sending) return;
-    setSending(true);
-    setError(null);
-    try {
-      await api.send(channel.id, content);
-      setText("");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const hint =
-    channel.kind === "dm"
-      ? `Message ${dmAgent?.name ?? ""}`
-      : `Message #${channel.name} — @mention an agent to get a reply`;
-
+function Attachments({ items }: { items: Attachment[] }) {
+  const images = items.filter((a) => a.kind === "image" && !a.path);
+  const files = items.filter((a) => !images.includes(a));
+  // Files from a folder upload are grouped under their top-level folder.
+  const folders = new Map<string, Attachment[]>();
+  const loose: Attachment[] = [];
+  for (const f of files) {
+    if (f.path?.includes("/")) {
+      const top = f.path.split("/")[0];
+      folders.set(top, [...(folders.get(top) ?? []), f]);
+    } else loose.push(f);
+  }
   return (
-    <div className="composer">
-      {suggestions.length > 0 && (
-        <ul className="mention-menu" role="listbox">
-          {suggestions.map((a, i) => (
-            <li key={a.id} role="option" aria-selected={i === menuIndex % suggestions.length}>
-              <button onMouseDown={(e) => (e.preventDefault(), pick(a))}>
-                <span aria-hidden>{a.avatar}</span> <strong>{a.name}</strong> <small>{a.role}</small>
-                {!members.some((m) => m.id === a.id) && <em>not in channel — will join</em>}
-              </button>
-            </li>
+    <div className="attachments">
+      {images.length > 0 && (
+        <div className="att-images">
+          {images.map((a) => (
+            <a key={a.id} href={`/api/uploads/${a.id}`} target="_blank" rel="noreferrer" title={a.name}>
+              <img src={`/api/uploads/${a.id}`} alt={a.name} loading="lazy" />
+            </a>
           ))}
-        </ul>
+        </div>
       )}
-      {error && <div className="composer-error">{error}</div>}
-      <div className="composer-box">
-        <textarea
-          ref={ref}
-          rows={1}
-          value={text}
-          placeholder={hint}
-          onChange={(e) => {
-            setText(e.target.value);
-            setMenuIndex(0);
-          }}
-          onKeyDown={(e) => {
-            if (suggestions.length) {
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                setMenuIndex((i) => (i + (e.key === "ArrowDown" ? 1 : suggestions.length - 1)) % suggestions.length);
-                return;
-              }
-              if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
-                e.preventDefault();
-                pick(suggestions[menuIndex % suggestions.length]);
-                return;
-              }
-            }
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-        />
-        <button className="send-btn" onClick={() => void send()} disabled={!text.trim() || sending} aria-label="Send">
-          ➤
-        </button>
-      </div>
+      {[...folders.entries()].map(([name, list]) => (
+        <details key={name} className="att-folder">
+          <summary>
+            📁 <strong>{name}</strong> <small>{list.length} files</small>
+          </summary>
+          <ul>
+            {list.map((a) => (
+              <li key={a.id}>
+                <a href={`/api/uploads/${a.id}`}>{a.path}</a> <small>{formatBytes(a.size)}</small>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
+      {loose.map((a) => (
+        <a key={a.id} className="att-file" href={`/api/uploads/${a.id}`} title={a.kind === "other" ? "Agents can't read this file type" : `Download ${a.name}`}>
+          <span aria-hidden>{iconFor(a.kind)}</span>
+          <span className="att-name">{a.name}</span>
+          <small>{formatBytes(a.size)}</small>
+        </a>
+      ))}
     </div>
   );
 }

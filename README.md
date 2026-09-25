@@ -17,6 +17,13 @@ hand them tasks, and let them build up shared team memory.
 - **Task board:** To do → In progress → Needs review → Done. Assign a task to an agent and press **Run**:
   the agent does the work in chat and moves the task to review. Agents can create, assign and update tasks too.
 - **Shared team memory:** facts every agent sees in every conversation. You and the agents can both add to it.
+- **Attachments:** add files, photos or whole folders (📎 menu, drag and drop, or paste). Agents see images and read
+  PDFs and text/code files; other types are attached but flagged as unreadable. Large photos are resized in the browser.
+- **Slash commands:** `/task`, `/remember`, `/summarize`, `/model`, `/voice`, `/hire`, `/clear`, `/help`.
+- **Voice:** dictate into the message box, or go hands-free (sends when you pause, reads replies aloud, listens again).
+  Uses the browser's built-in speech recognition (Chrome, Edge, Safari).
+- **Model and thinking:** pick Opus 5.5, Opus 5, Sonnet 5, Fable 5.1 or Haiku 4.5 per conversation, plus thinking depth
+  (Auto, Quick, Balanced, Deep, Deepest), or make a choice the workspace default. Replies show which model wrote them.
 - **Live streaming:** replies stream token by token over Server-Sent Events, with working status such as "Searching the web…".
 - **Web search** for research and sales agents; you can switch it on per agent in the profile.
 - **Agent profiles:** rename an agent, edit its role and instructions, or let it go.
@@ -36,14 +43,14 @@ Production:
 npm run build && npm start   # serves the app and API on http://localhost:3001
 ```
 
-Workspace data is saved to `data/workspace.json`. Delete that file to start fresh.
+Workspace data is saved to `data/workspace.json`, and uploaded files to `data/uploads/`. Delete the `data` folder to start fresh.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | Enables live agents. Without it the app runs in demo mode. |
-| `MIKOPARK_MODEL` | `claude-opus-5` | Model every agent uses. |
+| `MIKOPARK_MODEL` | `claude-opus-5` | Default model when a conversation or the workspace hasn't picked one in the app. |
 | `MIKOPARK_DEMO` | — | `1` forces demo mode, `0` forces live mode (e.g. when using `ANTHROPIC_AUTH_TOKEN`). |
 | `MIKOPARK_DATA` | `data/workspace.json` | Where the workspace is saved. |
 | `PORT` | `3001` | Server port. |

@@ -23,15 +23,21 @@ export class Team {
     return this.brain.mode;
   }
 
-  postHumanMessage(channelId: string, content: string) {
+  postHumanMessage(channelId: string, content: string, attachmentIds: string[] = []) {
     const channel = this.store.channel(channelId);
     if (!channel) throw new Error("Channel not found");
-    if (!content.trim()) throw new Error("Message is empty");
+    const attachments = attachmentIds.map((id) => {
+      const meta = this.store.uploads.meta(id);
+      if (!meta) throw new Error("An attachment is missing — try adding it again");
+      return meta;
+    });
+    if (!content.trim() && !attachments.length) throw new Error("Message is empty");
     const message = this.store.addMessage({
       channelId,
       authorKind: "human",
       authorId: this.store.workspace.me.id,
       content: content.trim(),
+      ...(attachments.length ? { attachments } : {}),
     });
     for (const agent of this.responders(channel, content)) this.schedule(agent, channel, 0);
     return message;
@@ -105,7 +111,14 @@ export class Team {
     const channel = this.store.channel(channelId);
     if (!agent || !channel) return;
 
-    const msg = this.store.addMessage({ channelId, authorKind: "agent", authorId: agent.id, content: "", streaming: true });
+    const msg = this.store.addMessage({
+      channelId,
+      authorKind: "agent",
+      authorId: agent.id,
+      content: "",
+      streaming: true,
+      ...(this.brain.mode === "live" ? { model: this.store.modelFor(channel).model } : {}),
+    });
     try {
       await this.brain.reply(agent, channel, {
         delta: (text) => this.store.appendToMessage(msg.id, text),

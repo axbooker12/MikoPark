@@ -1,9 +1,12 @@
 import { useEffect, useReducer } from "react";
+import { DEFAULT_MODEL } from "../../shared/models.ts";
 import type { Message, ServerEvent, Workspace } from "../../shared/types.ts";
 
 export interface State {
   connected: boolean;
   mode: "live" | "demo";
+  /** The model conversations use when they haven't picked one (before the workspace's own choice). */
+  serverModel: string;
   workspace: Workspace | null;
   messages: Record<string, Message[]>;
 }
@@ -21,7 +24,7 @@ function reducer(state: State, action: Action): State {
     case "connection":
       return { ...state, connected: action.connected };
     case "snapshot":
-      return { ...state, workspace: action.workspace, messages: action.messages, mode: action.mode };
+      return { ...state, workspace: action.workspace, messages: action.messages, mode: action.mode, serverModel: action.defaultModel ?? state.serverModel };
     case "workspace": {
       // Drop messages for channels that no longer exist (e.g. a fired agent's DM).
       const ids = new Set(action.workspace.channels.map((c) => c.id));
@@ -45,7 +48,7 @@ function reducer(state: State, action: Action): State {
 }
 
 export function useWorkspace(): State {
-  const [state, dispatch] = useReducer(reducer, { connected: false, mode: "demo", workspace: null, messages: {} });
+  const [state, dispatch] = useReducer(reducer, { connected: false, mode: "demo", serverModel: DEFAULT_MODEL, workspace: null, messages: {} });
   useEffect(() => {
     const es = new EventSource("/api/events");
     es.onopen = () => dispatch({ type: "connection", connected: true });

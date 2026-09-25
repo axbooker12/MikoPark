@@ -14,6 +14,8 @@ import type {
   Workspace,
 } from "../shared/types.ts";
 import { GENNY_TEMPLATE_ID, LEGACY_NAMES, findTemplate } from "./templates.ts";
+import { UploadStore } from "./uploads.ts";
+import { DEFAULT_MODEL, EFFORTS, findModel, type Effort } from "../shared/models.ts";
 
 interface DB {
   workspace: Workspace;
@@ -77,7 +79,7 @@ function seed(): DB {
           `Hi, I'm **${genny.name}** 👋 I help you build your AI team.\n\n` +
           "Tell me what's on your plate this week — a launch, a report, a codebase, outreach — and I'll suggest who to hire, " +
           "set up tasks, and hand work to the right teammates.\n\n" +
-          "You can also open **Hire agents** in the sidebar to browse the marketplace yourself.",
+          "You can also open **Visit departments** in the sidebar to browse specialists yourself.",
         createdAt: now,
       },
     ],
@@ -112,14 +114,37 @@ export function syncTemplateNotes(ws: Workspace) {
   }
 }
 
+/** The model used when neither the conversation nor the workspace has picked one. */
+export function serverDefaultModel(): string {
+  const env = process.env.MIKOPARK_MODEL;
+  return env && findModel(env) ? env : DEFAULT_MODEL;
+}
+
+/** Sets or clears (null) a model/effort choice after checking it's one we offer. */
+function applyModelPatch(target: { model?: string; effort?: Effort }, patch: { model?: string | null; effort?: Effort | null }) {
+  if (patch.model !== undefined) {
+    if (patch.model !== null && !findModel(patch.model)) throw new Error(`Unknown model ${patch.model}`);
+    if (patch.model === null) delete target.model;
+    else target.model = patch.model;
+  }
+  if (patch.effort !== undefined) {
+    if (patch.effort !== null && !EFFORTS.some((e) => e.id === patch.effort)) throw new Error(`Unknown effort ${patch.effort}`);
+    if (patch.effort === null) delete target.effort;
+    else target.effort = patch.effort;
+  }
+}
+
 export class Store extends EventEmitter {
   private db: DB;
   private saveTimer: NodeJS.Timeout | null = null;
+
+  readonly uploads: UploadStore;
 
   constructor(private file: string | null) {
     super();
     this.setMaxListeners(0);
     this.db = this.load();
+    this.uploads = new UploadStore(file ? path.join(path.dirname(file), "uploads") : null);
   }
 
   private load(): DB {
@@ -303,6 +328,37 @@ export class Store extends EventEmitter {
     for (const t of ws.tasks) if (t.assigneeAgentId === id) t.assigneeAgentId = null;
     this.db.messages = this.db.messages.filter((m) => !dmIds.has(m.channelId));
     this.workspaceChanged();
+  }
+
+  // ---- model settings ------------------------------------------------------
+
+  /** The model and effort a conversation uses: its own choice, else the workspace default, else the server default. */
+  modelFor(channel: Channel): { model: string; effort?: Effort } {
+    const settings = this.workspace.settings ?? {};
+    const model = [channel.model, settings.model].find((m) => m && findModel(m)) ?? serverDefaultModel();
+    return { model, effort: channel.effort ?? settings.effort };
+  }
+
+  setChannelModel(channelId: string, patch: { model?: string | null; effort?: Effort | null }): Channel {
+    const channel = this.channel(channelId);
+    if (!channel) throw new Error("Channel not found");
+    applyModelPatch(channel, patch);
+    this.workspaceChanged();
+    return channel;
+  }
+
+  setDefaultModel(patch: { model?: string | null; effort?: Effort | null }) {
+    this.workspace.settings ??= {};
+    applyModelPatch(this.workspace.settings, patch);
+    this.workspaceChanged();
+    return this.workspace.settings;
+  }
+
+  clearChannel(channelId: string) {
+    if (!this.channel(channelId)) throw new Error("Channel not found");
+    this.db.messages = this.db.messages.filter((m) => m.channelId !== channelId);
+    this.persist();
+    this.emitEvent({ type: "snapshot", workspace: this.workspace, messages: this.snapshotMessages(), mode: "live" });
   }
 
   // ---- channels ------------------------------------------------------------

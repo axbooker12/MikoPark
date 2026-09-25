@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Agent, Channel } from "../shared/types.ts";
+import type { Agent, Attachment, Channel } from "../shared/types.ts";
+import { findModel } from "../shared/models.ts";
 import type { Store } from "./store.ts";
 import { FOLLOW_UP_PREFIX, MAX_REPLY_PARAGRAPHS } from "../shared/followup.ts";
 import { TEMPLATES } from "./templates.ts";
@@ -79,28 +80,109 @@ export function systemPrompt(store: Store, agent: Agent, channel: Channel): { st
   return { stable, context };
 }
 
+type Part = string | BetaContentBlockParam;
+
+/** Attachments on this many most-recent messages are sent in full; older ones are mentioned by name. */
+const RECENT_ATTACHMENT_MESSAGES = 12;
+const MAX_TEXT_CHARS = 200_000;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** Keeps a request comfortably under the API's request size limit. */
+const MAX_REQUEST_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+function attachmentParts(store: Store, attachments: Attachment[], full: boolean, budget: { bytes: number }): Part[] {
+  const parts: Part[] = [];
+  for (const a of attachments) {
+    const label = a.path ?? a.name;
+    if (!full) {
+      parts.push(`[Earlier attachment: ${label}]`);
+      continue;
+    }
+    if (a.kind === "other") {
+      parts.push(`[Attached "${label}" (${a.type}). This file type can't be read; ask for a PDF or text version if you need its contents.]`);
+      continue;
+    }
+    const file = store.uploads.read(a.id);
+    if (!file) {
+      parts.push(`[Attached "${label}", but the file is no longer available.]`);
+      continue;
+    }
+    if (budget.bytes + file.data.length > MAX_REQUEST_ATTACHMENT_BYTES) {
+      parts.push(`[Attached "${label}", left out because this message's attachments are too large to send together.]`);
+      continue;
+    }
+    if (a.kind === "image") {
+      if (file.data.length > MAX_IMAGE_BYTES) {
+        parts.push(`[Attached image "${label}" is over 5 MB and couldn't be viewed.]`);
+        continue;
+      }
+      budget.bytes += file.data.length;
+      const media_type = a.type as "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+      parts.push({ type: "image", source: { type: "base64", media_type, data: file.data.toString("base64") } });
+    } else if (a.kind === "pdf") {
+      budget.bytes += file.data.length;
+      parts.push({ type: "document", title: label, source: { type: "base64", media_type: "application/pdf", data: file.data.toString("base64") } });
+    } else {
+      const text = file.data.toString("utf8");
+      if (!text.trim()) {
+        parts.push(`[Attached "${label}" is empty.]`);
+        continue;
+      }
+      const cut = text.length > MAX_TEXT_CHARS;
+      budget.bytes += Math.min(text.length, MAX_TEXT_CHARS);
+      parts.push({
+        type: "document",
+        title: label,
+        source: { type: "text", media_type: "text/plain", data: cut ? text.slice(0, MAX_TEXT_CHARS) : text },
+        ...(cut ? { context: `Only the first ${MAX_TEXT_CHARS.toLocaleString("en-US")} characters of this file are included.` } : {}),
+      });
+    }
+  }
+  return parts;
+}
+
 /** Converts channel history into alternating user/assistant turns from `agent`'s point of view. */
 export function historyFor(store: Store, agent: Agent, channel: Channel, extra?: string): BetaMessageParam[] {
-  const turns: { role: "user" | "assistant"; text: string }[] = [];
-  for (const m of store.channelMessages(channel.id)) {
-    if (m.streaming || !m.content.trim()) continue;
+  const turns: { role: "user" | "assistant"; parts: Part[] }[] = [];
+  const history = store.channelMessages(channel.id);
+  const budget = { bytes: 0 };
+  history.forEach((m, i) => {
+    const files = m.attachments ?? [];
+    if (m.streaming || (!m.content.trim() && !files.length)) return;
     const mine = m.authorKind === "agent" && m.authorId === agent.id;
-    const text = mine ? m.content : `[${store.authorName(m.authorKind, m.authorId)}]: ${m.content}`;
     const role = mine ? "assistant" : "user";
+    const parts: Part[] = [];
+    if (files.length && !mine) {
+      parts.push(...attachmentParts(store, files, i >= history.length - RECENT_ATTACHMENT_MESSAGES, budget));
+    }
+    const body = m.content.trim() || `(sent ${files.length} attachment${files.length === 1 ? "" : "s"})`;
+    parts.push(mine ? m.content : `[${store.authorName(m.authorKind, m.authorId)}]: ${body}`);
     const last = turns.at(-1);
-    if (last && last.role === role) last.text += `\n\n${text}`;
-    else turns.push({ role, text });
-  }
+    if (last && last.role === role) last.parts.push(...parts);
+    else turns.push({ role, parts });
+  });
   if (extra) {
     const last = turns.at(-1);
-    if (last && last.role === "user") last.text += `\n\n${extra}`;
-    else turns.push({ role: "user", text: extra });
+    if (last && last.role === "user") last.parts.push(extra);
+    else turns.push({ role: "user", parts: [extra] });
   }
-  if (turns[0]?.role === "assistant") turns.unshift({ role: "user", text: "(conversation start)" });
+  if (turns[0]?.role === "assistant") turns.unshift({ role: "user", parts: ["(conversation start)"] });
   if (turns.length === 0 || turns.at(-1)!.role === "assistant") {
-    turns.push({ role: "user", text: "(Continue — reply to the conversation above.)" });
+    turns.push({ role: "user", parts: ["(Continue — reply to the conversation above.)"] });
   }
-  return turns.map((t) => ({ role: t.role, content: t.text }));
+  return turns.map((t) => ({ role: t.role, content: toContent(t.parts) }));
+}
+
+/** Plain string when a turn is only text; otherwise content blocks with adjacent text merged. */
+function toContent(parts: Part[]): string | BetaContentBlockParam[] {
+  if (parts.every((p) => typeof p === "string")) return (parts as string[]).join("\n\n");
+  const blocks: BetaContentBlockParam[] = [];
+  for (const p of parts) {
+    const last = blocks.at(-1);
+    if (typeof p !== "string") blocks.push(p);
+    else if (last?.type === "text") last.text += `\n\n${p}`;
+    else blocks.push({ type: "text", text: p });
+  }
+  return blocks;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,19 +326,26 @@ export class ClaudeBrain implements Brain {
   readonly mode = "live" as const;
   private client = new Anthropic();
 
-  constructor(
-    private store: Store,
-    private model = process.env.MIKOPARK_MODEL || "claude-opus-5",
-  ) {}
+  constructor(private store: Store) {}
 
   async reply(agent: Agent, channel: Channel, sink: TurnSink, extra?: string): Promise<void> {
     const { stable, context } = systemPrompt(this.store, agent, channel);
+    const { model, effort } = this.store.modelFor(channel);
+    const config = findModel(model)!;
+
     const tools: BetaToolUnion[] = [...TOOLS];
     if (agent.builtIn) tools.push(...HIRING_TOOLS);
     if (agent.webSearch) {
       tools.push(
-        { type: "web_search_20260209", name: "web_search", max_uses: 5 },
-        { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 },
+        ...(config.webTools === "2026"
+          ? ([
+              { type: "web_search_20260209", name: "web_search", max_uses: 5 },
+              { type: "web_fetch_20260209", name: "web_fetch", max_uses: 5 },
+            ] as const)
+          : ([
+              { type: "web_search_20250305", name: "web_search", max_uses: 5 },
+              { type: "web_fetch_20250910", name: "web_fetch", max_uses: 5 },
+            ] as const)),
       );
     }
 
@@ -265,11 +354,12 @@ export class ClaudeBrain implements Brain {
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const stream = this.client.beta.messages.stream({
-        model: this.model,
-        max_tokens: 64000,
-        thinking: { type: "adaptive" },
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
+        model,
+        max_tokens: config.maxTokens,
+        // Haiku 4.5 has neither adaptive thinking nor effort, so it runs without them.
+        ...(config.adaptive ? { thinking: { type: "adaptive" as const } } : {}),
+        ...(config.adaptive && effort ? { output_config: { effort } } : {}),
+        ...(config.fallbacks ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
         system: [
           { type: "text", text: stable, cache_control: { type: "ephemeral" } },
           { type: "text", text: context },
@@ -352,7 +442,9 @@ export class DemoBrain implements Brain {
 
   async reply(agent: Agent, channel: Channel, sink: TurnSink, extra?: string): Promise<void> {
     const last = [...this.store.channelMessages(channel.id)].reverse().find((m) => m.authorKind !== "agent" || m.authorId !== agent.id);
-    const prompt = (extra ?? last?.content ?? "").trim();
+    const files = extra ? [] : last?.attachments ?? [];
+    const seen = files.length ? `I can see what you attached: ${files.map((f) => f.path ?? f.name).join(", ")}. ` : "";
+    const prompt = (extra ?? (seen + (last?.content ?? ""))).trim();
     sink.status("Thinking…");
     await sleep(this.delayMs * 20);
     sink.status(null);
@@ -375,7 +467,7 @@ export class DemoBrain implements Brain {
         return (
           `Sounds like a job for a few specialists. I'd hire:\n\n` +
           picks.map((t) => `- ${t.avatar} **${t.name}**, ${t.role}: ${t.tagline}`).join("\n") +
-          `\n\nOpen **Hire agents** in the sidebar to add them, then @mention them here and I'll help coordinate.` +
+          `\n\nOpen **Visit departments** in the sidebar to add them, then @mention them here and I'll help coordinate.` +
           footer
         );
       }

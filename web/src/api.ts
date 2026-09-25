@@ -1,4 +1,5 @@
-import type { AgentTemplate, TaskStatus } from "../../shared/types.ts";
+import type { Effort } from "../../shared/models.ts";
+import type { AgentTemplate, Attachment, TaskStatus } from "../../shared/types.ts";
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${url}`, {
@@ -15,7 +16,22 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
 
 export const api = {
   templates: () => call<AgentTemplate[]>("GET", "/templates"),
-  send: (channelId: string, content: string) => call("POST", `/channels/${channelId}/messages`, { content }),
+  send: (channelId: string, content: string, attachmentIds: string[] = []) =>
+    call("POST", `/channels/${channelId}/messages`, { content, attachmentIds }),
+  clearChannel: (channelId: string) => call("DELETE", `/channels/${channelId}/messages`),
+  setChannelModel: (channelId: string, patch: { model?: string | null; effort?: Effort | null }) =>
+    call("PATCH", `/channels/${channelId}/model`, patch),
+  setDefaultModel: (patch: { model?: string | null; effort?: Effort | null }) => call("PATCH", "/settings/model", patch),
+  /** Uploads one file. It's always sent as octet-stream so the server never parses it (e.g. as JSON). */
+  upload: async (file: Blob, name: string, type: string, path?: string): Promise<Attachment> => {
+    const q = new URLSearchParams({ name, type, ...(path ? { path } : {}) });
+    const res = await fetch(`/api/uploads?${q}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.status === 413 ? `${name} is larger than 25 MB` : res.statusText }));
+      throw new Error(err.error ?? res.statusText);
+    }
+    return res.json();
+  },
   createChannel: (name: string, topic: string, agentIds: string[]) =>
     call<{ id: string }>("POST", "/channels", { name, topic, agentIds }),
   setMembers: (channelId: string, agentIds: string[]) => call("PUT", `/channels/${channelId}/members`, { agentIds }),

@@ -1,8 +1,9 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import type { ServerEvent } from "../shared/types.ts";
-import type { Store } from "./store.ts";
+import { serverDefaultModel, type Store } from "./store.ts";
 import type { Team } from "./team.ts";
 import { TEMPLATES } from "./templates.ts";
+import { MAX_UPLOAD_BYTES } from "./uploads.ts";
 
 export function createApp(store: Store, team: Team) {
   const app = express();
@@ -18,9 +19,9 @@ export function createApp(store: Store, team: Team) {
       "X-Accel-Buffering": "no",
     });
     const send = (event: ServerEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
-    send({ type: "snapshot", workspace: store.workspace, messages: store.snapshotMessages(), mode: team.mode });
+    send({ type: "snapshot", workspace: store.workspace, messages: store.snapshotMessages(), mode: team.mode, defaultModel: serverDefaultModel() });
     const onEvent = (event: ServerEvent) =>
-      send(event.type === "snapshot" ? { ...event, mode: team.mode } : event);
+      send(event.type === "snapshot" ? { ...event, mode: team.mode, defaultModel: serverDefaultModel() } : event);
     store.on("event", onEvent);
     const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
     req.on("close", () => {
@@ -32,7 +33,45 @@ export function createApp(store: Store, team: Team) {
   api.get("/templates", (_req, res) => res.json(TEMPLATES.filter((t) => t.id !== "genny")));
 
   api.post("/channels/:id/messages", (req, res) => {
-    res.status(201).json(team.postHumanMessage(req.params.id, String(req.body?.content ?? "")));
+    const ids = Array.isArray(req.body?.attachmentIds) ? req.body.attachmentIds.map(String) : [];
+    res.status(201).json(team.postHumanMessage(req.params.id, String(req.body?.content ?? ""), ids));
+  });
+
+  api.delete("/channels/:id/messages", (req, res) => {
+    store.clearChannel(req.params.id);
+    res.status(204).end();
+  });
+
+  api.patch("/channels/:id/model", (req, res) => {
+    res.json(store.setChannelModel(req.params.id, { model: req.body?.model, effort: req.body?.effort }));
+  });
+
+  api.patch("/settings/model", (req, res) => {
+    res.json(store.setDefaultModel({ model: req.body?.model, effort: req.body?.effort }));
+  });
+
+  // Uploads: the raw file is the body; name, type and folder path ride in the query string.
+  api.post("/uploads", express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }), (req, res) => {
+    const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    const meta = store.uploads.save({
+      name: String(req.query.name ?? "file"),
+      type: String(req.query.type ?? req.headers["content-type"] ?? ""),
+      data,
+      path: req.query.path ? String(req.query.path) : undefined,
+    });
+    res.status(201).json(meta);
+  });
+
+  api.get("/uploads/:id", (req, res) => {
+    const file = store.uploads.read(req.params.id);
+    if (!file) return void res.status(404).json({ error: "File not found" });
+    // Only raster images display inline; everything else downloads, so an uploaded HTML or SVG can't run in the app.
+    const inline = file.meta.kind === "image";
+    res.setHeader("Content-Type", inline ? file.meta.type : "application/octet-stream");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.meta.name)}`);
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    res.end(file.data);
   });
 
   api.post("/channels", (req, res) => {

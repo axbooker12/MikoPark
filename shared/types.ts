@@ -1,4 +1,5 @@
 // Types shared by the server and the web client.
+import type { Effort } from "./models.ts";
 
 export type AuthorKind = "human" | "agent" | "system";
 
@@ -32,6 +33,19 @@ export interface Channel {
   humanIds: string[];
   agentIds: string[];
   createdAt: number;
+  model?: string; // overrides the workspace default for this conversation
+  effort?: Effort;
+}
+
+export type AttachmentKind = "image" | "pdf" | "text" | "other";
+
+export interface Attachment {
+  id: string;
+  name: string;
+  type: string; // MIME type
+  size: number;
+  kind: AttachmentKind;
+  path?: string; // relative path when uploaded as part of a folder
 }
 
 export interface Message {
@@ -44,6 +58,8 @@ export interface Message {
   streaming?: boolean;
   status?: string; // e.g. "Searching the web…" while an agent works
   error?: boolean;
+  attachments?: Attachment[];
+  model?: string; // model that wrote an agent message
 }
 
 export type TaskStatus = "todo" | "in_progress" | "review" | "done";
@@ -119,10 +135,11 @@ export interface Workspace {
   channels: Channel[];
   tasks: Task[];
   memory: MemoryItem[];
+  settings?: { model?: string; effort?: Effort };
 }
 
 export type ServerEvent =
-  | { type: "snapshot"; workspace: Workspace; messages: Record<string, Message[]>; mode: "live" | "demo" }
+  | { type: "snapshot"; workspace: Workspace; messages: Record<string, Message[]>; mode: "live" | "demo"; defaultModel?: string }
   | { type: "message"; message: Message }
   | { type: "message_delta"; channelId: string; messageId: string; delta: string }
   | { type: "message_status"; channelId: string; messageId: string; status: string | null }
