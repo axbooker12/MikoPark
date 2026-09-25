@@ -82,6 +82,17 @@ export function systemPrompt(store: Store, agent: Agent, channel: Channel): { st
 
 type Part = string | BetaContentBlockParam;
 
+export const VOICE_REPLY_NOTE =
+  "(They said this out loud and your reply will be read aloud to them. Answer like you're talking: " +
+  "one to three short sentences, no lists, headings, tables, links or markdown, and no \"Would you like more information\" line. " +
+  "If they need more, offer to go deeper.)";
+
+/** True when the newest message from a human in this conversation was spoken. */
+export function isVoiceTurn(store: Store, channel: Channel): boolean {
+  const last = [...store.channelMessages(channel.id)].reverse().find((m) => m.authorKind === "human");
+  return !!last?.viaVoice;
+}
+
 /** Attachments on this many most-recent messages are sent in full; older ones are mentioned by name. */
 const RECENT_ATTACHMENT_MESSAGES = 12;
 const MAX_TEXT_CHARS = 200_000;
@@ -349,7 +360,10 @@ export class ClaudeBrain implements Brain {
       );
     }
 
-    const messages = historyFor(this.store, agent, channel, extra);
+    const voiceTurn = !extra && isVoiceTurn(this.store, channel);
+    const messages = historyFor(this.store, agent, channel, extra ?? (voiceTurn ? VOICE_REPLY_NOTE : undefined));
+    // Spoken conversations favour speed: think briefly unless someone chose a depth for this conversation.
+    const turnEffort = effort ?? (voiceTurn ? "low" : undefined);
     let wroteText = false;
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -358,7 +372,7 @@ export class ClaudeBrain implements Brain {
         max_tokens: config.maxTokens,
         // Haiku 4.5 has neither adaptive thinking nor effort, so it runs without them.
         ...(config.adaptive ? { thinking: { type: "adaptive" as const } } : {}),
-        ...(config.adaptive && effort ? { output_config: { effort } } : {}),
+        ...(config.adaptive && turnEffort ? { output_config: { effort: turnEffort } } : {}),
         ...(config.fallbacks ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
         system: [
           { type: "text", text: stable, cache_control: { type: "ephemeral" } },

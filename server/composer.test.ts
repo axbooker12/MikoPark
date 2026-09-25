@@ -213,3 +213,35 @@ describe("fallback voice choice", async () => {
     expect(bestNaturalVoice([v("Samantha", "en-US", true), v("Zarvox")])?.name).toBe("Samantha");
   });
 });
+
+describe("speaking while a reply streams", async () => {
+  const { sentenceBoundary } = await import("../web/src/voice.ts");
+  it("cuts after complete sentences once there's enough text", () => {
+    const t = "Sure thing. Here is the plan for the launch this week. And then";
+    expect(sentenceBoundary(t, 0)).toBe(t.indexOf(" And"));
+    expect(sentenceBoundary("Hi. Short.", 0)).toBe(0); // not enough yet
+    expect(sentenceBoundary(t, t.indexOf(" And"))).toBe(t.indexOf(" And")); // nothing new finished
+  });
+  it("doesn't cut inside a code block", () => {
+    const t = "Here is some code for you to try out now.\n\n```js\nlet a = 1. b = 2. more code here and here.\n";
+    expect(sentenceBoundary(t, 0)).toBe(t.indexOf("```"));
+  });
+});
+
+describe("voice turns", () => {
+  it("ask for a short spoken-style reply and think fast unless a depth was chosen", async () => {
+    const run = async (effort?: "high") => {
+      bodies.length = 0;
+      const store = new Store(null);
+      const dm = store.channel("c_dm_genny")!;
+      store.setChannelModel(dm.id, { model: "claude-opus-5-5", effort });
+      store.addMessage({ channelId: dm.id, authorKind: "human", authorId: "u_me", content: "what's next?", viaVoice: true });
+      await new ClaudeBrain(store).reply(store.workspace.agents[0], dm, { delta: () => {}, status: () => {} });
+      return bodies[0] as { messages: { content: unknown }[]; output_config?: { effort: string } };
+    };
+    const quick = await run();
+    expect(JSON.stringify(quick.messages.at(-1))).toContain("read aloud");
+    expect(quick.output_config).toEqual({ effort: "low" });
+    expect((await run("high")).output_config).toEqual({ effort: "high" });
+  });
+});

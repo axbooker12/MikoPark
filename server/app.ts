@@ -35,7 +35,7 @@ export function createApp(store: Store, team: Team, voiceEngine = new VoiceEngin
 
   api.post("/channels/:id/messages", (req, res) => {
     const ids = Array.isArray(req.body?.attachmentIds) ? req.body.attachmentIds.map(String) : [];
-    res.status(201).json(team.postHumanMessage(req.params.id, String(req.body?.content ?? ""), ids));
+    res.status(201).json(team.postHumanMessage(req.params.id, String(req.body?.content ?? ""), ids, { viaVoice: req.body?.viaVoice === true }));
   });
 
   api.delete("/channels/:id/messages", (req, res) => {

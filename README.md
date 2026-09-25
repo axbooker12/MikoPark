@@ -21,7 +21,9 @@ hand them tasks, and let them build up shared team memory.
   PDFs and text/code files; other types are attached but flagged as unreadable. Large photos are resized in the browser.
 - **Slash commands:** `/task`, `/remember`, `/summarize`, `/model`, `/voice`, `/hire`, `/clear`, `/help`.
 - **Voice:** dictate into the message box, or go hands-free (sends when you pause, reads replies aloud, listens again).
-  Uses the browser's built-in speech recognition (Chrome, Edge, Safari).
+  Talk to an agent and it talks back: spoken messages get short, conversational replies with quick thinking, and
+  speech starts with the first sentence while the rest is still being written. Uses the browser's built-in speech
+  recognition (Chrome, Edge, Safari).
 - **Custom voices:** upload a short recording (WAV, MP3, M4A…) and an agent reads its replies in that voice, using a
   free, local voice engine ([Chatterbox](https://github.com/resemble-ai/chatterbox), MIT). Agents can also use any of the
   computer's built-in voices. Set it in the agent's profile under **Voice**.

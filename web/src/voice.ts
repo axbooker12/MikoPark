@@ -101,19 +101,24 @@ export type SpeakVoice = AgentVoice | undefined;
 // Everything spoken goes through one queue so replies never talk over each other.
 let queue: Promise<void> = Promise.resolve();
 let generation = 0; // bumped by stopSpeaking() to cancel queued and in-flight speech
-let current: { audio?: HTMLAudioElement; abort?: AbortController } = {};
+let current: { audio?: HTMLAudioElement } = {};
+const inflight = new Set<AbortController>();
 
 export function speak(markdown: string, voice?: SpeakVoice) {
   const text = speakableText(markdown);
   if (!text) return;
   const gen = generation;
+  // Start generating the first bit of a custom voice now, while anything queued before it is still playing.
+  const chunks = chunkText(text);
+  const first = voice?.kind === "custom" && engineUp !== false ? fetchTts(voice.id, chunks[0]) : undefined;
+  first?.catch(() => {}); // handled when it's awaited
   queue = queue.then(async () => {
     if (gen !== generation) return;
     setSpeaking(true);
     try {
       if (voice?.kind === "custom") {
         if (await engineRunning()) {
-          const result = await speakWithEngine(text, voice.id, gen);
+          const result = await speakWithEngine(chunks, voice.id, gen, first);
           if (result === "ok" || result === "partial" || gen !== generation) {
             if (result === "partial") setVoiceNotice("The custom voice stopped partway through that reply (voice engine error).");
             return;
@@ -132,15 +137,33 @@ export function speak(markdown: string, voice?: SpeakVoice) {
 
 export function stopSpeaking() {
   generation++;
-  current.abort?.abort();
+  inflight.forEach((a) => a.abort());
+  inflight.clear();
   current.audio?.pause();
   current = {};
   if (speechOutputSupported) window.speechSynthesis.cancel();
   setSpeaking(false);
 }
 
+/**
+ * End of the last complete sentence after `from` (0 if none yet). Waits for enough text to be
+ * worth speaking, and never cuts inside an open code block.
+ */
+export function sentenceBoundary(text: string, from: number, minChars = 40): number {
+  const slice = text.slice(from);
+  if ((text.slice(0, from).match(/```/g)?.length ?? 0) % 2 === 1) return from;
+  let cut = -1;
+  for (const m of slice.matchAll(/[.!?](?=["')\]]*\s)|\n\n/g)) {
+    const end = m.index! + m[0].length;
+    const before = slice.slice(0, end);
+    if ((before.match(/```/g)?.length ?? 0) % 2 === 1) break; // inside a code block
+    cut = end;
+  }
+  return cut >= minChars ? from + cut : from;
+}
+
 /** Splits text into sentence-sized chunks so the first one can start playing while the rest generate. */
-export function chunkText(text: string, max = 280): string[] {
+export function chunkText(text: string, max = 200): string[] {
   const sentences = text.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) ?? [text];
   const chunks: string[] = [];
   let cur = "";
@@ -155,33 +178,35 @@ export function chunkText(text: string, max = 280): string[] {
   return chunks.flatMap((c) => (c.length <= 1000 ? [c] : c.match(/[\s\S]{1,1000}/g)!));
 }
 
-/** Plays text in a custom voice: "ok", "partial" (failed after some audio played), or the error message. */
-async function speakWithEngine(text: string, voiceId: string, gen: number): Promise<string> {
-  const chunks = chunkText(text);
-  const fetchChunk = (chunk: string) => {
-    const abort = new AbortController();
-    current.abort = abort;
-    return fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voiceId, text: chunk }),
-      signal: abort.signal,
-    }).then(async (res) => {
+function fetchTts(voiceId: string, text: string): Promise<string> {
+  const abort = new AbortController();
+  inflight.add(abort);
+  return fetch("/api/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ voiceId, text }),
+    signal: abort.signal,
+  })
+    .then(async (res) => {
       if (res.status === 503) engineUp = false;
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? `error ${res.status}`);
       }
       return URL.createObjectURL(await res.blob());
-    });
-  };
+    })
+    .finally(() => inflight.delete(abort));
+}
+
+/** Plays text in a custom voice: "ok", "partial" (failed after some audio played), or the error message. */
+async function speakWithEngine(chunks: string[], voiceId: string, gen: number, first?: Promise<string>): Promise<string> {
   let played = 0;
   try {
-    let next = fetchChunk(chunks[0]);
+    let next = first ?? fetchTts(voiceId, chunks[0]);
     for (let i = 0; i < chunks.length; i++) {
       const url = await next;
       if (gen !== generation) return "ok";
-      if (i + 1 < chunks.length) next = fetchChunk(chunks[i + 1]); // generate ahead while this one plays
+      if (i + 1 < chunks.length) next = fetchTts(voiceId, chunks[i + 1]); // generate ahead while this one plays
       await playUrl(url, gen);
       URL.revokeObjectURL(url);
       played++;
@@ -314,18 +339,26 @@ export function useSpeaking(): boolean {
 // ---- speech input ----------------------------------------------------------------
 
 /**
- * Wraps one SpeechRecognition session. `onText` gets the running transcript (final + interim);
- * `onPause` fires after `pauseMs` without new words, with the final transcript so far.
+ * Continuous dictation. `onText` gets the running transcript. When `onPause` is set (hands-free),
+ * it fires after `pauseMs` of silence with everything said so far, and listening starts afresh.
+ *
+ * Browsers differ: Chrome marks phrases "final" as you go, Safari often only when the mic stops,
+ * and both end sessions on their own. So the transcript is rebuilt from every result each time,
+ * and a pause sends final + not-yet-final words alike.
  */
-export function useDictation(opts: { onText: (text: string) => void; onPause?: (finalText: string) => void; pauseMs?: number }) {
+export function useDictation(opts: { onText: (text: string) => void; onPause?: (text: string) => void; pauseMs?: number }) {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rec = useRef<Recognition | null>(null);
-  const finalText = useRef("");
+  const committed = useRef(""); // words from earlier sessions of this dictation
+  const session = useRef(""); // words from the current session (final + interim)
+  const discard = useRef(false); // drop the current session's words (they were just sent)
   const pauseTimer = useRef<number | undefined>(undefined);
   const wanted = useRef(false);
   const optsRef = useRef(opts);
   optsRef.current = opts;
+
+  const joined = () => `${committed.current} ${session.current}`.replace(/\s+/g, " ").trim();
 
   const stop = useCallback(() => {
     wanted.current = false;
@@ -336,36 +369,45 @@ export function useDictation(opts: { onText: (text: string) => void; onPause?: (
   const start = useCallback(() => {
     if (!Ctor) return;
     setError(null);
-    finalText.current = "";
+    committed.current = "";
+    session.current = "";
     const r = new Ctor();
     r.continuous = true;
     r.interimResults = true;
     r.lang = navigator.language || "en-US";
     r.onresult = (e) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const res = e.results[i];
-        if (res.isFinal) finalText.current += res[0].transcript;
-        else interim += res[0].transcript;
-      }
-      optsRef.current.onText((finalText.current + interim).replace(/\s+/g, " ").trimStart());
+      if (discard.current) return;
+      let text = "";
+      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+      session.current = text;
+      const all = joined();
+      optsRef.current.onText(all);
       window.clearTimeout(pauseTimer.current);
-      if (optsRef.current.onPause) {
+      if (optsRef.current.onPause && all) {
         pauseTimer.current = window.setTimeout(() => {
-          const text = finalText.current.trim();
-          if (text) {
-            finalText.current = "";
-            optsRef.current.onPause?.(text);
-          }
-        }, optsRef.current.pauseMs ?? 1500);
+          const said = joined();
+          if (!said) return;
+          committed.current = "";
+          session.current = "";
+          discard.current = true; // ignore late results from this session…
+          r.abort(); // …and start a clean one (onend restarts it)
+          optsRef.current.onPause?.(said);
+        }, optsRef.current.pauseMs ?? 1100);
       }
     };
     r.onerror = (e) => {
       if (e.error === "no-speech" || e.error === "aborted") return;
-      setError(e.error === "not-allowed" || e.error === "service-not-allowed" ? "Microphone access was blocked. Allow it in your browser's site settings." : `Voice input stopped (${e.error}).`);
+      setError(
+        e.error === "not-allowed" || e.error === "service-not-allowed"
+          ? "Microphone access was blocked. Allow it in your browser's site settings."
+          : `Voice input stopped (${e.error}).`,
+      );
       wanted.current = false;
     };
     r.onend = () => {
+      if (!discard.current) committed.current = joined();
+      session.current = "";
+      discard.current = false;
       // Browsers end sessions after silence; keep going while the person still wants to talk.
       if (wanted.current) {
         try {
@@ -379,6 +421,7 @@ export function useDictation(opts: { onText: (text: string) => void; onPause?: (
     };
     rec.current = r;
     wanted.current = true;
+    discard.current = false;
     try {
       r.start();
       setListening(true);
@@ -387,10 +430,14 @@ export function useDictation(opts: { onText: (text: string) => void; onPause?: (
     }
   }, []);
 
-  useEffect(() => () => {
-    wanted.current = false;
-    rec.current?.abort();
-  }, []);
+  useEffect(
+    () => () => {
+      wanted.current = false;
+      window.clearTimeout(pauseTimer.current);
+      rec.current?.abort();
+    },
+    [],
+  );
 
   return { listening, error, start, stop };
 }

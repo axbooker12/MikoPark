@@ -250,7 +250,7 @@ export function Composer(props: Props) {
         setText("");
         return;
       }
-      await api.send(channel.id, trimmed, ready.map((a) => a.id));
+      await api.send(channel.id, trimmed, ready.map((a) => a.id), { viaVoice: spokenDraft.current });
       onSent(spokenDraft.current);
       spokenDraft.current = false;
       setText("");

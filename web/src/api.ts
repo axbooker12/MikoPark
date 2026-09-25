@@ -16,8 +16,8 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
 
 export const api = {
   templates: () => call<AgentTemplate[]>("GET", "/templates"),
-  send: (channelId: string, content: string, attachmentIds: string[] = []) =>
-    call("POST", `/channels/${channelId}/messages`, { content, attachmentIds }),
+  send: (channelId: string, content: string, attachmentIds: string[] = [], opts: { viaVoice?: boolean } = {}) =>
+    call("POST", `/channels/${channelId}/messages`, { content, attachmentIds, viaVoice: !!opts.viaVoice }),
   clearChannel: (channelId: string) => call("DELETE", `/channels/${channelId}/messages`),
   setChannelModel: (channelId: string, patch: { model?: string | null; effort?: Effort | null }) =>
     call("PATCH", `/channels/${channelId}/model`, patch),

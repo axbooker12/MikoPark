@@ -23,7 +23,7 @@ export class Team {
     return this.brain.mode;
   }
 
-  postHumanMessage(channelId: string, content: string, attachmentIds: string[] = []) {
+  postHumanMessage(channelId: string, content: string, attachmentIds: string[] = [], opts: { viaVoice?: boolean } = {}) {
     const channel = this.store.channel(channelId);
     if (!channel) throw new Error("Channel not found");
     const attachments = attachmentIds.map((id) => {
@@ -38,6 +38,7 @@ export class Team {
       authorId: this.store.workspace.me.id,
       content: content.trim(),
       ...(attachments.length ? { attachments } : {}),
+      ...(opts.viaVoice ? { viaVoice: true } : {}),
     });
     for (const agent of this.responders(channel, content)) this.schedule(agent, channel, 0);
     return message;

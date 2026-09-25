@@ -7,7 +7,7 @@ import { MembersModal } from "./Modals.tsx";
 import { Composer, iconFor } from "./Composer.tsx";
 import { formatBytes } from "./files.ts";
 import { Avatar, Md, clock } from "./ui.tsx";
-import { speak, stopSpeaking, useVoicePrefs } from "./voice.ts";
+import { sentenceBoundary, speak, stopSpeaking, useVoicePrefs } from "./voice.ts";
 
 interface Props {
   ws: Workspace;
@@ -28,15 +28,30 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
 
   // Read agent replies aloud as they finish (only ones that finish while this conversation is open).
   // Voice in, voice out: after you send a message by voice, replies are spoken until you type again.
+  // Replies are spoken a sentence at a time while they're still being written, so speech starts early.
   const talkingSince = useRef<number | null>(null);
-  const spoken = useRef(new Set(messages.filter((m) => !m.streaming).map((m) => m.id)));
+  const spokenUpTo = useRef(new Map<string, number>(messages.filter((m) => !m.streaming).map((m) => [m.id, Infinity])));
   useEffect(() => {
     for (const m of messages) {
-      if (m.streaming || spoken.current.has(m.id)) continue;
-      spoken.current.add(m.id);
+      if (m.authorKind !== "agent" || m.error) continue;
+      const done = spokenUpTo.current.get(m.id) ?? 0;
+      if (done === Infinity) continue;
       const replyToVoice = talkingSince.current !== null && m.createdAt >= talkingSince.current;
-      if ((voice.readAloud || replyToVoice) && m.authorKind === "agent" && m.content && !m.error) {
-        speak(m.content, ws.agents.find((a) => a.id === m.authorId)?.voice);
+      if (!voice.readAloud && !replyToVoice) {
+        if (!m.streaming) spokenUpTo.current.set(m.id, Infinity);
+        continue;
+      }
+      const agentVoice = ws.agents.find((a) => a.id === m.authorId)?.voice;
+      if (m.streaming) {
+        const cut = sentenceBoundary(m.content, done);
+        if (cut > done) {
+          speak(m.content.slice(done, cut), agentVoice);
+          spokenUpTo.current.set(m.id, cut);
+        }
+      } else {
+        const rest = m.content.slice(done);
+        if (rest.trim()) speak(rest, agentVoice);
+        spokenUpTo.current.set(m.id, Infinity);
       }
     }
   }, [messages, voice.readAloud]); // eslint-disable-line react-hooks/exhaustive-deps

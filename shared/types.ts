@@ -71,6 +71,7 @@ export interface Message {
   status?: string; // e.g. "Searching the web…" while an agent works
   error?: boolean;
   attachments?: Attachment[];
+  viaVoice?: boolean; // a human message that was spoken; the reply will be read aloud
   model?: string; // model that wrote an agent message
 }
 
