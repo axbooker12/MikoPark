@@ -18,6 +18,8 @@ interface Props {
   /** Files dropped on the chat area are handed in here. */
   dropped: File[] | null;
   onDropHandled: () => void;
+  /** Called after a message is sent; byVoice is true when it was spoken rather than typed. */
+  onSent: (byVoice: boolean) => void;
 }
 
 interface Pending {
@@ -52,7 +54,8 @@ const MAX_FOLDER_FILES = 100;
 const SKIP_IN_FOLDERS = /(^|\/)(\.git|node_modules|\.DS_Store|__pycache__|\.venv|dist|build)(\/|$)/;
 
 export function Composer(props: Props) {
-  const { ws, channel, members, dmAgent, mode, serverModel, agentBusy, voice, onHire, dropped, onDropHandled } = props;
+  const { ws, channel, members, dmAgent, mode, serverModel, agentBusy, voice, onHire, dropped, onDropHandled, onSent } = props;
+  const spokenDraft = useRef(false); // the current draft came (at least partly) from the microphone
   const draftKey = `mikopark:draft:${channel.id}`;
   const [text, setText] = useState(() => {
     try {
@@ -247,6 +250,8 @@ export function Composer(props: Props) {
         return;
       }
       await api.send(channel.id, trimmed, ready.map((a) => a.id));
+      onSent(spokenDraft.current);
+      spokenDraft.current = false;
       setText("");
       pending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
       setPending([]);
@@ -263,7 +268,10 @@ export function Composer(props: Props) {
   const handsFree = useRef(false);
   const [handsFreeOn, setHandsFreeOn] = useState(false);
   const dictation = useDictation({
-    onText: (t) => setText(handsFree.current || !baseText.current ? t : `${baseText.current} ${t}`),
+    onText: (t) => {
+      spokenDraft.current = true;
+      setText(handsFree.current || !baseText.current ? t : `${baseText.current} ${t}`);
+    },
     onPause: (finalText) => {
       if (!handsFree.current) return;
       setText("");
@@ -293,6 +301,8 @@ export function Composer(props: Props) {
 
   const micActive = handsFreeOn || dictation.listening;
   const toggleMic = () => {
+    // Keep the keyboard in the message box so Enter sends instead of re-pressing the mic.
+    requestAnimationFrame(() => ref.current?.focus());
     if (!micActive) return startMic(voice.mode);
     setHandsFreeOn(false);
     handsFree.current = false;
@@ -359,6 +369,14 @@ export function Composer(props: Props) {
         </ul>
       )}
       {flash && <div className={`composer-flash ${flash.error ? "error" : ""}`}>{flash.text}</div>}
+      {speaking && (
+        <div className="speaking-bar" role="status">
+          <span className="dot-typing" aria-hidden /> Speaking…
+          <button className="link small" onClick={() => stopSpeaking()}>
+            ■ Stop
+          </button>
+        </div>
+      )}
 
       <div className={`composer-box ${micActive ? "listening" : ""}`}>
         {pending.length > 0 && <Tray items={pending} onRemove={removePending} />}
@@ -368,6 +386,7 @@ export function Composer(props: Props) {
           value={text}
           placeholder={hint}
           onChange={(e) => {
+            if (!e.target.value.trim()) spokenDraft.current = false;
             setText(e.target.value);
             setMenuIndex(0);
           }}
@@ -446,7 +465,7 @@ export function Composer(props: Props) {
               className="caret-btn"
             >
               <p className="menu-title">Microphone mode</p>
-              <Choice checked={voice.mode === "dictate"} onClick={() => voice.setMode("dictate")} title="Dictate" sub="Speak and your words appear in the box; you press send" />
+              <Choice checked={voice.mode === "dictate"} onClick={() => voice.setMode("dictate")} title="Dictate" sub="Your words appear in the box and you press send. The reply is spoken back." />
               <Choice
                 checked={voice.mode === "handsfree"}
                 onClick={() => voice.setMode("handsfree")}
@@ -455,7 +474,7 @@ export function Composer(props: Props) {
               />
               <label className={`menu-check ${speechOutputSupported ? "" : "disabled"}`}>
                 <input type="checkbox" checked={voice.readAloud} disabled={!speechOutputSupported} onChange={(e) => voice.setReadAloud(e.target.checked)} />
-                Read replies aloud
+                Read every reply aloud (even when you type)
               </label>
               <p className="menu-note">Your browser handles speech recognition; some browsers send audio to their provider to transcribe it.</p>
             </Menu>

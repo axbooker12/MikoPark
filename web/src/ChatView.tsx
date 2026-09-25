@@ -27,14 +27,19 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
   const [dropped, setDropped] = useState<File[] | null>(null);
 
   // Read agent replies aloud as they finish (only ones that finish while this conversation is open).
+  // Voice in, voice out: after you send a message by voice, replies are spoken until you type again.
+  const talkingSince = useRef<number | null>(null);
   const spoken = useRef(new Set(messages.filter((m) => !m.streaming).map((m) => m.id)));
   useEffect(() => {
     for (const m of messages) {
       if (m.streaming || spoken.current.has(m.id)) continue;
       spoken.current.add(m.id);
-      if (voice.readAloud && m.authorKind === "agent" && m.content && !m.error) speak(m.content, ws.agents.find((a) => a.id === m.authorId)?.voice);
+      const replyToVoice = talkingSince.current !== null && m.createdAt >= talkingSince.current;
+      if ((voice.readAloud || replyToVoice) && m.authorKind === "agent" && m.content && !m.error) {
+        speak(m.content, ws.agents.find((a) => a.id === m.authorId)?.voice);
+      }
     }
-  }, [messages, voice.readAloud]);
+  }, [messages, voice.readAloud]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => stopSpeaking(), [channel.id]);
   const [showMembers, setShowMembers] = useState(false);
   const dmAgent = channel.kind === "dm" ? ws.agents.find((a) => a.id === channel.agentIds[0]) : undefined;
@@ -139,6 +144,10 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
         onHire={onHire}
         dropped={dropped}
         onDropHandled={() => setDropped(null)}
+        onSent={(byVoice) => {
+          talkingSince.current = byVoice ? Date.now() - 2000 : null;
+          if (!byVoice) stopSpeaking();
+        }}
       />
       {showMembers && <MembersModal ws={ws} channel={channel} onClose={() => setShowMembers(false)} />}
     </section>
