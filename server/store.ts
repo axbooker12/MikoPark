@@ -99,11 +99,12 @@ export function renameLegacyAgents(ws: Workspace) {
   }
 }
 
-/** Keeps each agent's disclaimer and notice in step with its template, so wording updates reach hired agents. */
+/** Keeps each agent's color, disclaimer and notice in step with its template, so theme and wording updates reach hired agents. */
 export function syncTemplateNotes(ws: Workspace) {
   for (const agent of ws.agents) {
     const t = findTemplate(agent.templateId);
     if (!t) continue;
+    agent.color = t.color;
     agent.disclaimer = t.disclaimer;
     agent.notice = t.notice;
   }
