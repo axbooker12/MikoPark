@@ -199,7 +199,10 @@ export class Store extends EventEmitter {
   hireAgent(templateId: string, customName?: string): Agent {
     const t = findTemplate(templateId);
     if (!t) throw new Error(`Unknown template "${templateId}"`);
-    if (t.id === GENNY_TEMPLATE_ID) throw new Error("Genny is already on your team");
+    if (t.id === GENNY_TEMPLATE_ID) {
+      const guide = this.workspace.agents.find((a) => a.builtIn)?.name ?? t.name;
+      throw new Error(`${guide} is already on your team`);
+    }
     const taken = new Set(this.workspace.agents.map((a) => a.name.toLowerCase()));
     let name = (customName?.trim() || t.name).replace(/\s+/g, "");
     for (let i = 2; taken.has(name.toLowerCase()); i++) name = `${t.name}${i}`;

@@ -17,7 +17,7 @@ export interface Agent {
   color: string;
   instructions: string;
   webSearch: boolean;
-  builtIn?: boolean; // Genny — cannot be fired
+  builtIn?: boolean; // the onboarding guide (Genny by default) — cannot be fired
   hiredAt: number;
 }
 

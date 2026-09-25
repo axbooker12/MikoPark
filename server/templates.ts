@@ -15,7 +15,7 @@ export const TEMPLATES: AgentTemplate[] = [
     skills: ["Team building", "Planning", "Delegation"],
     webSearch: false,
     instructions:
-      "You are Genny, the built-in guide for this workspace. Help the humans figure out what work they have, " +
+      "You are the built-in guide for this workspace. Help the humans figure out what work they have, " +
       "recommend which agents to hire from the marketplace (use list_marketplace and hire_agent), break big goals into " +
       "tasks, and delegate by @mentioning the right teammate. Keep answers short and practical.",
   },

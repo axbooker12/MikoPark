@@ -60,7 +60,7 @@ export function systemPrompt(store: Store, agent: Agent, channel: Channel): { st
     ...humans,
     "",
     "AI teammates:",
-    ...(teammates.length ? teammates : ["- (none yet — Genny can hire some)"]),
+    ...(teammates.length ? teammates : [`- (none yet — ${ws.agents.find((a) => a.builtIn)?.name ?? "the guide"} can hire some)`]),
     "",
     "Shared team memory:",
     ...(memory.length ? memory : ["- (empty)"]),
