@@ -21,7 +21,7 @@ export const TEMPLATES: AgentTemplate[] = [
   },
   {
     id: "researcher",
-    name: "Remy",
+    name: "ResearchAnalyst",
     role: "Research Analyst",
     avatar: "🔎",
     color: "#0ea5e9",
@@ -35,7 +35,7 @@ export const TEMPLATES: AgentTemplate[] = [
   },
   {
     id: "writer",
-    name: "Wren",
+    name: "ContentWriter",
     role: "Content Writer",
     avatar: "✍️",
     color: "#f97316",
@@ -49,7 +49,7 @@ export const TEMPLATES: AgentTemplate[] = [
   },
   {
     id: "analyst",
-    name: "Dex",
+    name: "DataAnalyst",
     role: "Data Analyst",
     avatar: "📊",
     color: "#10b981",
@@ -63,7 +63,7 @@ export const TEMPLATES: AgentTemplate[] = [
   },
   {
     id: "engineer",
-    name: "Kai",
+    name: "SoftwareEngineer",
     role: "Software Engineer",
     avatar: "🛠️",
     color: "#64748b",
@@ -77,7 +77,7 @@ export const TEMPLATES: AgentTemplate[] = [
   },
   {
     id: "designer",
-    name: "Ivy",
+    name: "ProductDesigner",
     role: "Product Designer",
     avatar: "🎨",
     color: "#ec4899",
@@ -91,7 +91,7 @@ export const TEMPLATES: AgentTemplate[] = [
   },
   {
     id: "pm",
-    name: "Pia",
+    name: "ProjectManager",
     role: "Project Manager",
     avatar: "📋",
     color: "#eab308",
@@ -105,7 +105,7 @@ export const TEMPLATES: AgentTemplate[] = [
   },
   {
     id: "sales",
-    name: "Sol",
+    name: "SalesOutreach",
     role: "Sales & Outreach",
     avatar: "🤝",
     color: "#14b8a6",
@@ -142,6 +142,17 @@ export const TEMPLATES: AgentTemplate[] = [
       "Never apologize. Be direct, clear and concise.",
   },
 ];
+
+/** Default names agents were hired under before they were named after their roles. */
+export const LEGACY_NAMES: Record<string, string> = {
+  researcher: "Remy",
+  writer: "Wren",
+  analyst: "Dex",
+  engineer: "Kai",
+  designer: "Ivy",
+  pm: "Pia",
+  sales: "Sol",
+};
 
 export function findTemplate(id: string): AgentTemplate | undefined {
   return TEMPLATES.find((t) => t.id === id);

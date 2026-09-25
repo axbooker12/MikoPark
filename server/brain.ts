@@ -32,7 +32,7 @@ export function systemPrompt(store: Store, agent: Agent, channel: Channel): { st
     "",
     "How this workspace works:",
     "- Messages from others arrive prefixed with the author's name in brackets, e.g. \"[Alex]: …\". Never add such a prefix to your own replies.",
-    "- To hand work to a teammate or ask them something, @mention them by name (e.g. @Kai) in your reply; they'll pick it up after you finish. Only mention a teammate when you actually need them to act, and never mention yourself.",
+    "- To hand work to a teammate or ask them something, @mention them by name (e.g. @ContentWriter) in your reply; they'll pick it up after you finish. Only mention a teammate when you actually need them to act, and never mention yourself.",
     "- Use create_task / update_task to keep the shared task board accurate, and save_memory for durable facts the whole team should remember (preferences, decisions, brand voice). Don't save trivia.",
     "- Deliver finished work (the draft, the table, the code) rather than describing what you would do. Use markdown.",
     "",
@@ -116,7 +116,7 @@ const TOOLS: Anthropic.Beta.Messages.BetaTool[] = [
       properties: {
         title: { type: "string", description: "Short imperative title" },
         description: { type: "string", description: "What done looks like" },
-        assignee: { type: "string", description: "Name of the AI teammate to assign, e.g. Kai. Omit to leave unassigned." },
+        assignee: { type: "string", description: "Name of the AI teammate to assign, e.g. ContentWriter. Omit to leave unassigned." },
       },
       required: ["title"],
       additionalProperties: false,

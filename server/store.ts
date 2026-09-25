@@ -13,7 +13,7 @@ import type {
   TaskStatus,
   Workspace,
 } from "../shared/types.ts";
-import { GENNY_TEMPLATE_ID, findTemplate } from "./templates.ts";
+import { GENNY_TEMPLATE_ID, LEGACY_NAMES, findTemplate } from "./templates.ts";
 
 interface DB {
   workspace: Workspace;
@@ -83,6 +83,22 @@ function seed(): DB {
   };
 }
 
+/**
+ * Agents hired under the old personal default names (Remy, Wren, …) take their role-based name,
+ * unless someone renamed them or the new name is already taken.
+ */
+export function renameLegacyAgents(ws: Workspace) {
+  for (const agent of ws.agents) {
+    const legacy = LEGACY_NAMES[agent.templateId];
+    const match = legacy && new RegExp(`^${legacy}(\\d*)$`).exec(agent.name);
+    if (!match) continue;
+    const name = findTemplate(agent.templateId)!.name + match[1];
+    if (ws.agents.some((a) => a.name.toLowerCase() === name.toLowerCase())) continue;
+    agent.name = name;
+    for (const c of ws.channels) if (c.kind === "dm" && c.agentIds[0] === agent.id) c.name = name;
+  }
+}
+
 export class Store extends EventEmitter {
   private db: DB;
   private saveTimer: NodeJS.Timeout | null = null;
@@ -100,6 +116,7 @@ export class Store extends EventEmitter {
         // Workspaces saved before the guide became Benson still carry Genny's fairy avatar.
         const guide = db.workspace.agents.find((a) => a.builtIn);
         if (guide?.avatar === "🧚") guide.avatar = findTemplate(GENNY_TEMPLATE_ID)!.avatar;
+        renameLegacyAgents(db.workspace);
         return db;
       } catch (err) {
         console.warn(`Could not read ${this.file}, starting fresh:`, err);

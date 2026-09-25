@@ -4,7 +4,7 @@ import type { Agent, Channel } from "../shared/types.ts";
 import { createApp } from "./app.ts";
 import { DemoBrain, historyFor, runTool, type Brain, type TurnSink } from "./brain.ts";
 import { findMentionedAgents } from "./mentions.ts";
-import { Store } from "./store.ts";
+import { Store, renameLegacyAgents } from "./store.ts";
 import { Team } from "./team.ts";
 
 /** A brain that replies with a fixed script per agent name, recording who was asked. */
@@ -59,17 +59,17 @@ describe("Team routing", () => {
   });
 
   it("hands off between agents via @mentions, adding them to the channel", async () => {
-    const { store, brain, team } = setup({ Benson: "Over to @Kai", Kai: "Done. @Benson fyi" });
+    const { store, brain, team } = setup({ Benson: "Over to @SoftwareEngineer", SoftwareEngineer: "Done. @Benson fyi" });
     const kai = store.hireAgent("engineer");
     const ch = store.createChannel("build", "", [store.workspace.agents[0].id]);
     team.postHumanMessage(ch.id, "@Benson please build it");
     await team.idle();
-    expect(brain.calls.map((c) => c.agent)).toEqual(["Benson", "Kai", "Benson", "Kai"]);
+    expect(brain.calls.map((c) => c.agent)).toEqual(["Benson", "SoftwareEngineer", "Benson", "SoftwareEngineer"]);
     expect(store.channel(ch.id)!.agentIds).toContain(kai.id);
   });
 
   it("caps hand-off chains", async () => {
-    const { brain, team, store } = setup({ Benson: "@Kai", Kai: "@Benson" });
+    const { brain, team, store } = setup({ Benson: "@SoftwareEngineer", SoftwareEngineer: "@Benson" });
     store.hireAgent("engineer");
     team.postHumanMessage("c_general", "@Benson go");
     await team.idle();
@@ -77,7 +77,7 @@ describe("Team routing", () => {
   });
 
   it("runs a task and moves it to review", async () => {
-    const { store, brain, team } = setup({ Kai: "Here is the code." });
+    const { store, brain, team } = setup({ SoftwareEngineer: "Here is the code." });
     const kai = store.hireAgent("engineer");
     const task = store.createTask({ title: "Write a script", assigneeAgentId: kai.id, createdBy: { kind: "human", id: "u_me" } });
     await team.startTask(task.id);
@@ -91,8 +91,8 @@ describe("agent tools", () => {
     const store = new Store(null);
     const genny = store.workspace.agents[0];
     const general = store.channel("c_general")!;
-    expect(runTool(store, genny, general, "hire_agent", { template_id: "writer" })).toContain("Hired Wren");
-    runTool(store, genny, general, "create_task", { title: "Draft post", assignee: "@wren" });
+    expect(runTool(store, genny, general, "hire_agent", { template_id: "writer" })).toContain("Hired ContentWriter");
+    runTool(store, genny, general, "create_task", { title: "Draft post", assignee: "@contentwriter" });
     expect(store.workspace.tasks[0].assigneeAgentId).toBe(store.workspace.agents[1].id);
     runTool(store, genny, general, "save_memory", { fact: "Tone: friendly" });
     expect(store.workspace.memory[0].content).toBe("Tone: friendly");
@@ -120,7 +120,7 @@ describe("HTTP API", () => {
     const app = createApp(store, team);
     const hired = await request(app).post("/api/agents").send({ templateId: "researcher" });
     expect(hired.status).toBe(201);
-    expect(hired.body.name).toBe("Remy");
+    expect(hired.body.name).toBe("ResearchAnalyst");
     const dm = store.workspace.channels.find((c) => c.kind === "dm" && c.agentIds[0] === hired.body.id)!;
     expect((await request(app).post(`/api/channels/${dm.id}/messages`).send({ content: "find competitors" })).status).toBe(201);
     await team.idle();
@@ -137,5 +137,20 @@ describe("marketplace templates", () => {
     expect(a).toMatchObject({ name: "SearchEngineStrategist", role: "Search Engine Strategist", webSearch: true });
     expect(a.instructions).toContain("Never apologize");
     expect(findMentionedAgents("@searchenginestrategist audit this", store.workspace.agents)).toEqual([a]);
+  });
+});
+
+describe("legacy agent names", () => {
+  it("renames agents still using an old default name, keeping numbering and custom names", () => {
+    const store = new Store(null);
+    const a = store.hireAgent("writer");
+    const b = store.hireAgent("writer");
+    const c = store.hireAgent("engineer");
+    a.name = "Wren";
+    b.name = "Wren2";
+    c.name = "Linus"; // renamed by a person — leave alone
+    renameLegacyAgents(store.workspace);
+    expect([a.name, b.name, c.name]).toEqual(["ContentWriter", "ContentWriter2", "Linus"]);
+    expect(store.workspace.channels.find((ch) => ch.kind === "dm" && ch.agentIds[0] === a.id)!.name).toBe("ContentWriter");
   });
 });
