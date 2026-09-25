@@ -28,11 +28,7 @@ export function Md({ children }: { children: string }) {
     <div className="md">
       <Markdown
         remarkPlugins={[remarkGfm]}
-        components={{
-          // In-app links (#/…) stay in the app; everything else opens in a new tab.
-          a: ({ href, node: _node, ...props }) =>
-            href?.startsWith("#/") ? <a href={href} {...props} /> : <a href={href} {...props} target="_blank" rel="noreferrer" />,
-        }}
+        components={{ a: (props) => <a {...props} target="_blank" rel="noreferrer" /> }}
       >
         {children}
       </Markdown>

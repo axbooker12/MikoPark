@@ -34,7 +34,6 @@ export function Sidebar({ ws, view, messages, onGo, onHire, onNewChannel }: Prop
   };
   const departments = teamByDepartment(ws);
   const openTasks = ws.tasks.filter((t) => t.status !== "done").length;
-  const transcripts = ws.channels.filter((c) => c.kind === "call" && c.endedAt).length;
   const isOpen = (id: string) => view.kind === "channel" && view.id === id;
   const busy = (channelId: string) => (messages[channelId] ?? []).some((m) => m.streaming);
 
@@ -59,10 +58,6 @@ export function Sidebar({ ws, view, messages, onGo, onHire, onNewChannel }: Prop
         <button className={`nav-item ${view.kind === "memory" ? "active" : ""}`} onClick={() => onGo({ kind: "memory" })}>
           <span className="nav-icon">🧠</span> Team memory
           {ws.memory.length > 0 && <span className="count muted">{ws.memory.length}</span>}
-        </button>
-        <button className={`nav-item ${view.kind === "transcripts" ? "active" : ""}`} onClick={() => onGo({ kind: "transcripts" })}>
-          <span className="nav-icon">📝</span> Transcripts
-          {transcripts > 0 && <span className="count muted">{transcripts}</span>}
         </button>
       </div>
 

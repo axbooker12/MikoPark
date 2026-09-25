@@ -22,7 +22,6 @@ export interface Agent {
   category?: string; // department, from its template
   disclaimer?: string; // shown under each of this agent's messages (from its template)
   notice?: string; // shown at the top of conversations this agent is in (from its template)
-  voice?: AgentVoice; // how replies are read aloud; unset = the browser's default voice
   hiredAt: number;
 }
 
@@ -30,26 +29,12 @@ export interface Channel {
   id: string;
   name: string;
   topic: string;
-  kind: "channel" | "dm" | "call";
+  kind: "channel" | "dm";
   humanIds: string[];
   agentIds: string[];
   createdAt: number;
   model?: string; // overrides the workspace default for this conversation
   effort?: Effort;
-  // Voice calls are hidden channels whose messages form the call transcript.
-  parentId?: string; // the DM the call was started from
-  endedAt?: number;
-}
-
-/** A custom voice (a sample for the local voice engine) or one of the computer's built-in voices. */
-export type AgentVoice = { kind: "custom"; id: string } | { kind: "system"; name: string };
-
-export interface Voice {
-  id: string;
-  name: string;
-  ext: string; // file extension of the sample
-  size: number;
-  createdAt: number;
 }
 
 export type AttachmentKind = "image" | "pdf" | "text" | "other";
@@ -74,8 +59,6 @@ export interface Message {
   status?: string; // e.g. "Searching the web…" while an agent works
   error?: boolean;
   attachments?: Attachment[];
-  viaVoice?: boolean; // a human message that was spoken; the reply will be read aloud
-  callId?: string; // a system note in a chat that links to a call transcript
   model?: string; // model that wrote an agent message
 }
 
@@ -153,7 +136,6 @@ export interface Workspace {
   tasks: Task[];
   memory: MemoryItem[];
   settings?: { model?: string; effort?: Effort };
-  voices?: Voice[];
 }
 
 export type ServerEvent =

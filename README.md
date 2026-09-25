@@ -19,15 +19,7 @@ hand them tasks, and let them build up shared team memory.
 - **Shared team memory:** facts every agent sees in every conversation. You and the agents can both add to it.
 - **Attachments:** add files, photos or whole folders (📎 menu, drag and drop, or paste). Agents see images and read
   PDFs and text/code files; other types are attached but flagged as unreadable. Large photos are resized in the browser.
-- **Slash commands:** `/task`, `/remember`, `/summarize`, `/model`, `/call`, `/hire`, `/clear`, `/help`.
-- **Voice calls:** press **📞 Call** in an agent's chat to talk it through out loud. The call screen listens, sends when
-  you pause, and the agent answers in its voice (speech starts with its first sentence). Mute, interrupt, and optional
-  captions. When the call ends, the transcript is saved under **📝 Transcripts** (read, download, delete), the chat gets
-  a one-line note linking to it, and the agent remembers the call in later chats.
-- **Dictation:** 🎤 in the message box types what you say. Replies in chat can optionally be read aloud.
-- **Custom voices:** upload a short recording (WAV, MP3, M4A…) and an agent reads its replies in that voice, using a
-  free, local voice engine ([Chatterbox](https://github.com/resemble-ai/chatterbox), MIT). Agents can also use any of the
-  computer's built-in voices. Set it in the agent's profile under **Voice**.
+- **Slash commands:** `/task`, `/remember`, `/summarize`, `/model`, `/hire`, `/clear`, `/help`.
 - **Model and thinking:** pick Opus 5.5, Opus 5, Sonnet 5, Fable 5.1 or Haiku 4.5 per conversation, plus thinking depth
   (Auto, Quick, Balanced, Deep, Deepest), or make a choice the workspace default. Replies show which model wrote them.
 - **Live streaming:** replies stream token by token over Server-Sent Events, with working status such as "Searching the web…".
@@ -43,30 +35,13 @@ cp .env.example .env         # add ANTHROPIC_API_KEY to use real agents
 npm run dev                  # API on :3001, web on http://localhost:5173
 ```
 
-### Custom voices (optional)
-
-The voice engine runs on your own computer, so audio never leaves it and there's no per-use cost. It needs Python 3.11
-(`brew install python@3.11`, or `brew install uv`). Install it once:
-
-```bash
-npm run voice:setup
-```
-
-After that, `npm run dev` starts it automatically. The first start downloads the voice model (a few GB), so give it a few
-minutes. Then open an agent's profile, choose **＋ Add a voice from a recording**, and pick your sample. About 10 seconds to
-3 minutes of clear speech from one person works best. Only use recordings of people who have agreed to it.
-
-Engine settings (environment variables): `VOICE_MODEL` (`turbo` default, `standard`, or `nano` for slower computers),
-`VOICE_DEVICE` (`auto`, `mps`, `cuda`, `cpu`), `VOICE_ENGINE_PORT` (5055). If the engine isn't running, agents fall back
-to the computer's built-in voices.
-
 Production:
 
 ```bash
 npm run build && npm start   # serves the app and API on http://localhost:3001
 ```
 
-Workspace data is saved to `data/workspace.json`, uploaded files to `data/uploads/`, and voice samples to `data/voices/`. Delete the `data` folder to start fresh.
+Workspace data is saved to `data/workspace.json`, and uploaded files to `data/uploads/`. Delete the `data` folder to start fresh.
 
 ## Configuration
 

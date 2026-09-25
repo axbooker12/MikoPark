@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type {
   Agent,
-  AgentVoice,
   AuthorKind,
   Channel,
   MemoryItem,
@@ -12,12 +11,10 @@ import type {
   ServerEvent,
   Task,
   TaskStatus,
-  Voice,
   Workspace,
 } from "../shared/types.ts";
 import { GENNY_TEMPLATE_ID, LEGACY_NAMES, findTemplate } from "./templates.ts";
 import { UploadStore } from "./uploads.ts";
-import { VoiceSamples } from "./voices.ts";
 import { DEFAULT_MODEL, EFFORTS, findModel, type Effort } from "../shared/models.ts";
 
 interface DB {
@@ -93,6 +90,19 @@ function seed(): DB {
  * Agents hired under the old personal default names (Remy, Wren, …) take their role-based name,
  * unless someone renamed them or the new name is already taken.
  */
+/**
+ * Voice features (calls, transcripts, custom voices) were removed. Clear what they left in saved
+ * workspaces: call conversations, "Call with…" notes in chats, and voice settings.
+ */
+export function dropVoiceData(db: DB) {
+  const ws = db.workspace as Workspace & { voices?: unknown };
+  const calls = new Set(ws.channels.filter((c) => c.kind !== "channel" && c.kind !== "dm").map((c) => c.id));
+  ws.channels = ws.channels.filter((c) => !calls.has(c.id));
+  db.messages = db.messages.filter((m) => !calls.has(m.channelId) && !(m as Message & { callId?: string }).callId);
+  for (const a of ws.agents) delete (a as Agent & { voice?: unknown }).voice;
+  delete ws.voices;
+}
+
 export function renameLegacyAgents(ws: Workspace) {
   for (const agent of ws.agents) {
     const legacy = LEGACY_NAMES[agent.templateId];
@@ -142,14 +152,12 @@ export class Store extends EventEmitter {
   private saveTimer: NodeJS.Timeout | null = null;
 
   readonly uploads: UploadStore;
-  readonly voiceSamples: VoiceSamples;
 
   constructor(private file: string | null) {
     super();
     this.setMaxListeners(0);
     this.db = this.load();
     this.uploads = new UploadStore(file ? path.join(path.dirname(file), "uploads") : null);
-    this.voiceSamples = new VoiceSamples(file ? path.join(path.dirname(file), "voices") : null);
   }
 
   private load(): DB {
@@ -160,6 +168,7 @@ export class Store extends EventEmitter {
         const guide = db.workspace.agents.find((a) => a.builtIn);
         if (guide?.avatar === "🧚") guide.avatar = findTemplate(GENNY_TEMPLATE_ID)!.avatar;
         renameLegacyAgents(db.workspace);
+        dropVoiceData(db);
         syncTemplateNotes(db.workspace);
         return db;
       } catch (err) {
@@ -303,7 +312,7 @@ export class Store extends EventEmitter {
     return agent;
   }
 
-  updateAgent(id: string, patch: Partial<Pick<Agent, "name" | "role" | "instructions" | "webSearch">> & { voice?: AgentVoice | null }): Agent {
+  updateAgent(id: string, patch: Partial<Pick<Agent, "name" | "role" | "instructions" | "webSearch">>): Agent {
     const agent = this.agent(id);
     if (!agent) throw new Error("Agent not found");
     if (patch.name !== undefined) {
@@ -317,13 +326,6 @@ export class Store extends EventEmitter {
     if (patch.role !== undefined) agent.role = patch.role;
     if (patch.instructions !== undefined) agent.instructions = patch.instructions;
     if (patch.webSearch !== undefined) agent.webSearch = patch.webSearch;
-    if (patch.voice !== undefined) {
-      if (patch.voice === null) delete agent.voice;
-      else if (patch.voice.kind === "custom" && this.voice(patch.voice.id)) agent.voice = { kind: "custom", id: patch.voice.id };
-      else if (patch.voice.kind === "system" && typeof patch.voice.name === "string" && patch.voice.name.trim())
-        agent.voice = { kind: "system", name: patch.voice.name.slice(0, 200) };
-      else throw new Error("Unknown voice");
-    }
     this.workspaceChanged();
     return agent;
   }
@@ -371,111 +373,6 @@ export class Store extends EventEmitter {
     this.db.messages = this.db.messages.filter((m) => m.channelId !== channelId);
     this.persist();
     this.emitEvent({ type: "snapshot", workspace: this.workspace, messages: this.snapshotMessages(), mode: "live" });
-  }
-
-  // ---- voices ----------------------------------------------------------------
-
-  voice(id: string) {
-    return this.workspace.voices?.find((v) => v.id === id);
-  }
-
-  addVoice(name: string, fileName: string, data: Buffer): Voice {
-    const voice = this.voiceSamples.save(name, fileName, data);
-    (this.workspace.voices ??= []).push(voice);
-    this.workspaceChanged();
-    return voice;
-  }
-
-  renameVoice(id: string, name: string): Voice {
-    const voice = this.voice(id);
-    if (!voice) throw new Error("Voice not found");
-    if (!name.trim()) throw new Error("Name is required");
-    voice.name = name.trim().slice(0, 60);
-    this.workspaceChanged();
-    return voice;
-  }
-
-  removeVoice(id: string) {
-    const voice = this.voice(id);
-    if (!voice) return;
-    this.workspace.voices = this.workspace.voices!.filter((v) => v.id !== id);
-    for (const a of this.workspace.agents) if (a.voice?.kind === "custom" && a.voice.id === id) delete a.voice;
-    this.voiceSamples.remove(voice);
-    this.workspaceChanged();
-  }
-
-  // ---- voice calls -----------------------------------------------------------
-
-  /** Starts a voice call with the agent of a direct message. The call is a hidden channel holding the transcript. */
-  startCall(dmId: string): Channel {
-    const dm = this.channel(dmId);
-    if (!dm || dm.kind !== "dm") throw new Error("Calls start from a direct message with an agent");
-    const agent = this.agent(dm.agentIds[0]);
-    if (!agent) throw new Error("Agent not found");
-    const now = Date.now();
-    const call: Channel = {
-      id: newId("call"),
-      name: `Call with ${agent.name}`,
-      topic: "",
-      kind: "call",
-      humanIds: [...dm.humanIds],
-      agentIds: [agent.id],
-      createdAt: now,
-      parentId: dm.id,
-      ...(dm.model ? { model: dm.model } : {}),
-      ...(dm.effort ? { effort: dm.effort } : {}),
-    };
-    this.workspace.channels.push(call);
-    this.workspaceChanged();
-    return call;
-  }
-
-  /** Ends a call. A call where nobody spoke leaves no transcript; otherwise the chat gets a note linking to it. */
-  endCall(callId: string): Channel | null {
-    const call = this.channel(callId);
-    if (!call || call.kind !== "call") throw new Error("Call not found");
-    if (call.endedAt) return call;
-    const turns = this.channelMessages(call.id, 10_000).filter((m) => m.content.trim());
-    if (!turns.length) {
-      this.workspace.channels = this.workspace.channels.filter((c) => c.id !== call.id);
-      this.db.messages = this.db.messages.filter((m) => m.channelId !== call.id);
-      this.workspaceChanged();
-      return null;
-    }
-    call.endedAt = Date.now();
-    this.workspaceChanged();
-    const parent = call.parentId ? this.channel(call.parentId) : undefined;
-    if (parent) {
-      const mins = Math.max(1, Math.round((call.endedAt - call.createdAt) / 60_000));
-      this.addMessage({
-        channelId: parent.id,
-        authorKind: "system",
-        authorId: "system",
-        content: `📞 ${call.name} · ${mins} min · [Open transcript](#/transcripts/${call.id})`,
-        callId: call.id,
-      });
-    }
-    return call;
-  }
-
-  deleteCall(callId: string) {
-    const call = this.channel(callId);
-    if (!call || call.kind !== "call") return;
-    this.workspace.channels = this.workspace.channels.filter((c) => c.id !== callId);
-    this.db.messages = this.db.messages.filter((m) => m.channelId !== callId && m.callId !== callId);
-    this.persist();
-    this.emitEvent({ type: "snapshot", workspace: this.workspace, messages: this.snapshotMessages(), mode: "live" });
-  }
-
-  /** Plain-text transcript of a call. */
-  transcript(callId: string): string {
-    const call = this.channel(callId);
-    if (!call || call.kind !== "call") throw new Error("Call not found");
-    const when = new Date(call.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
-    const lines = this.channelMessages(call.id, 10_000)
-      .filter((m) => m.content.trim())
-      .map((m) => `${this.authorName(m.authorKind, m.authorId)}: ${m.content.trim()}`);
-    return [`${call.name} — ${when}`, "", ...lines].join("\n");
   }
 
   // ---- channels ------------------------------------------------------------

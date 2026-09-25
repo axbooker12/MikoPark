@@ -1,5 +1,5 @@
 import type { Effort } from "../../shared/models.ts";
-import type { AgentTemplate, AgentVoice, Attachment, Channel, TaskStatus, Voice } from "../../shared/types.ts";
+import type { AgentTemplate, Attachment, TaskStatus } from "../../shared/types.ts";
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${url}`, {
@@ -16,8 +16,8 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
 
 export const api = {
   templates: () => call<AgentTemplate[]>("GET", "/templates"),
-  send: (channelId: string, content: string, attachmentIds: string[] = [], opts: { viaVoice?: boolean } = {}) =>
-    call("POST", `/channels/${channelId}/messages`, { content, attachmentIds, viaVoice: !!opts.viaVoice }),
+  send: (channelId: string, content: string, attachmentIds: string[] = []) =>
+    call("POST", `/channels/${channelId}/messages`, { content, attachmentIds }),
   clearChannel: (channelId: string) => call("DELETE", `/channels/${channelId}/messages`),
   setChannelModel: (channelId: string, patch: { model?: string | null; effort?: Effort | null }) =>
     call("PATCH", `/channels/${channelId}/model`, patch),
@@ -36,7 +36,7 @@ export const api = {
     call<{ id: string }>("POST", "/channels", { name, topic, agentIds }),
   setMembers: (channelId: string, agentIds: string[]) => call("PUT", `/channels/${channelId}/members`, { agentIds }),
   hire: (templateId: string) => call<{ id: string }>("POST", "/agents", { templateId }),
-  updateAgent: (id: string, patch: { name?: string; role?: string; instructions?: string; webSearch?: boolean; voice?: AgentVoice | null }) =>
+  updateAgent: (id: string, patch: { name?: string; role?: string; instructions?: string; webSearch?: boolean }) =>
     call("PATCH", `/agents/${id}`, patch),
   fire: (id: string) => call("DELETE", `/agents/${id}`),
   createTask: (t: { title: string; description: string; assigneeAgentId: string | null }) => call("POST", "/tasks", t),
@@ -46,17 +46,4 @@ export const api = {
   addMemory: (content: string) => call("POST", "/memory", { content }),
   deleteMemory: (id: string) => call("DELETE", `/memory/${id}`),
   reset: () => call("POST", "/reset"),
-  addVoice: async (file: File, name: string): Promise<Voice> => {
-    const q = new URLSearchParams({ name, file: file.name });
-    const res = await fetch(`/api/voices?${q}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.status === 413 ? "The recording is larger than 30 MB" : res.statusText }));
-      throw new Error(err.error ?? res.statusText);
-    }
-    return res.json();
-  },
-  deleteVoice: (id: string) => call("DELETE", `/voices/${id}`),
-  startCall: (channelId: string) => call<Channel>("POST", "/calls", { channelId }),
-  endCall: (id: string) => call<{ call: Channel | null }>("POST", `/calls/${id}/end`),
-  deleteCall: (id: string) => call("DELETE", `/calls/${id}`),
 };

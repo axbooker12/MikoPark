@@ -3,7 +3,6 @@ import { EFFORTS, MODELS, findModel, modelLabel, type Effort } from "../../share
 import type { Agent, Attachment, Channel, Workspace } from "../../shared/types.ts";
 import { api } from "./api.ts";
 import { formatBytes, prepareImage } from "./files.ts";
-import { speechInputSupported, speechOutputSupported, stopSpeaking, useDictation, useSpeaking, useVoiceNotice } from "./voice.ts";
 
 interface Props {
   ws: Workspace;
@@ -12,14 +11,10 @@ interface Props {
   dmAgent?: Agent;
   mode: "live" | "demo";
   serverModel: string;
-  voice: { readAloud: boolean; setReadAloud: (on: boolean) => void };
-  /** Starts a voice call with this conversation's agent (only offered in direct messages). */
-  onCall?: () => void;
   onHire: () => void;
   /** Files dropped on the chat area are handed in here. */
   dropped: File[] | null;
   onDropHandled: () => void;
-  onSent: () => void;
 }
 
 interface Pending {
@@ -44,7 +39,6 @@ const COMMANDS: Command[] = [
   { name: "remember", args: "<fact>", help: "Save a fact to team memory" },
   { name: "summarize", help: "Ask for a summary of this conversation" },
   { name: "model", help: "Choose the model and thinking depth" },
-  { name: "call", help: "Start a voice call with this agent" },
   { name: "hire", help: "Visit departments to bring on specialists" },
   { name: "clear", help: "Clear this conversation's messages" },
   { name: "help", help: "Show these commands" },
@@ -54,7 +48,7 @@ const MAX_FOLDER_FILES = 100;
 const SKIP_IN_FOLDERS = /(^|\/)(\.git|node_modules|\.DS_Store|__pycache__|\.venv|dist|build)(\/|$)/;
 
 export function Composer(props: Props) {
-  const { ws, channel, members, dmAgent, mode, serverModel, voice, onHire, onCall, dropped, onDropHandled, onSent } = props;
+  const { ws, channel, members, dmAgent, mode, serverModel, onHire, dropped, onDropHandled } = props;
   const draftKey = `mikopark:draft:${channel.id}`;
   const [text, setText] = useState(() => {
     try {
@@ -67,13 +61,11 @@ export function Composer(props: Props) {
   const [flash, setFlash] = useState<{ text: string; error?: boolean } | null>(null);
   const [sending, setSending] = useState(false);
   const [menuIndex, setMenuIndex] = useState(0);
-  const [openMenu, setOpenMenu] = useState<"attach" | "mic" | "model" | null>(null);
+  const [openMenu, setOpenMenu] = useState<"attach" | "model" | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
-  const speaking = useSpeaking();
-  const [voiceNotice, clearVoiceNotice] = useVoiceNotice();
 
   useEffect(() => {
     try {
@@ -213,11 +205,6 @@ export function Composer(props: Props) {
       case "model":
         setOpenMenu("model");
         return true;
-      case "call":
-      case "voice":
-        if (!onCall) return fail("Calls are with one agent: open an agent's direct message and try again"), true;
-        onCall();
-        return true;
       case "hire":
         onHire();
         return true;
@@ -251,7 +238,6 @@ export function Composer(props: Props) {
         return;
       }
       await api.send(channel.id, trimmed, ready.map((a) => a.id));
-      onSent();
       setText("");
       pending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
       setPending([]);
@@ -261,25 +247,6 @@ export function Composer(props: Props) {
       setSending(false);
     }
   }
-
-  // ---- microphone: dictation types into the box; talking with an agent happens in a call ----
-
-  const baseText = useRef("");
-  const dictation = useDictation({
-    onText: (t) => setText(baseText.current ? `${baseText.current} ${t}` : t),
-  });
-  const micActive = dictation.listening;
-  const toggleMic = () => {
-    // Keep the keyboard in the message box so Enter sends instead of re-pressing the mic.
-    requestAnimationFrame(() => ref.current?.focus());
-    if (micActive) return dictation.stop();
-    stopSpeaking();
-    baseText.current = text.trim();
-    dictation.start();
-  };
-  useEffect(() => {
-    if (dictation.error) fail(dictation.error);
-  }, [dictation.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- model --------------------------------------------------------------------------
 
@@ -295,9 +262,7 @@ export function Composer(props: Props) {
 
   // ---- render ---------------------------------------------------------------------------
 
-  const hint = micActive
-    ? "Listening… click the mic to stop"
-    : channel.kind === "dm"
+  const hint = channel.kind === "dm"
       ? `Message ${dmAgent?.name ?? ""} — type / for commands`
       : `Message #${channel.name} — @mention an agent, / for commands`;
 
@@ -332,24 +297,8 @@ export function Composer(props: Props) {
         </ul>
       )}
       {flash && <div className={`composer-flash ${flash.error ? "error" : ""}`}>{flash.text}</div>}
-      {voiceNotice && (
-        <div className="composer-flash error" role="status">
-          🔈 {voiceNotice}{" "}
-          <button className="link small" onClick={clearVoiceNotice}>
-            Dismiss
-          </button>
-        </div>
-      )}
-      {speaking && (
-        <div className="speaking-bar" role="status">
-          <span className="dot-typing" aria-hidden /> Speaking…
-          <button className="link small" onClick={() => stopSpeaking()}>
-            ■ Stop
-          </button>
-        </div>
-      )}
 
-      <div className={`composer-box ${micActive ? "listening" : ""}`}>
+      <div className="composer-box">
         {pending.length > 0 && <Tray items={pending} onRemove={removePending} />}
         <textarea
           ref={ref}
@@ -407,43 +356,6 @@ export function Composer(props: Props) {
           <button className="bar-btn" title="Commands" aria-label="Commands" onClick={() => (setText("/"), ref.current?.focus())}>
             /
           </button>
-
-          <div className="mic-group">
-            <button
-              className={`bar-btn mic ${micActive ? "on" : ""}`}
-              onClick={toggleMic}
-              disabled={!speechInputSupported}
-              aria-pressed={micActive}
-              title={
-                speechInputSupported
-                  ? micActive
-                    ? "Stop dictating"
-                    : "Dictate: your words are typed into the box"
-                  : "Voice input isn't supported in this browser. Try Chrome, Edge or Safari."
-              }
-              aria-label="Dictate"
-            >
-              🎤
-            </button>
-            <Menu
-              open={openMenu === "mic"}
-              onOpen={(o) => setOpenMenu(o ? "mic" : null)}
-              label="Voice options"
-              button={<span aria-hidden className="caret">▾</span>}
-              className="caret-btn"
-            >
-              {onCall && (
-                <button onClick={() => (setOpenMenu(null), onCall())}>
-                  📞 Start a voice call with {dmAgent?.name}
-                </button>
-              )}
-              <label className={`menu-check ${speechOutputSupported ? "" : "disabled"}`}>
-                <input type="checkbox" checked={voice.readAloud} disabled={!speechOutputSupported} onChange={(e) => voice.setReadAloud(e.target.checked)} />
-                Read replies aloud in chat
-              </label>
-              <p className="menu-note">🎤 types what you say into the box. To talk it through out loud, start a call. Your browser handles speech recognition; some browsers send audio to their provider to transcribe it.</p>
-            </Menu>
-          </div>
 
           <span className="spacer" />
 

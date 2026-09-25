@@ -2,18 +2,16 @@
   "name": "mikopark",
   "version": "0.1.0",
   "private": true,
-  "description": "MikoPark \u2014 a team workspace where people and AI agents collaborate (GenTeam-style).",
+  "description": "MikoPark — a team workspace where people and AI agents collaborate (GenTeam-style).",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n server,web,voice -c blue,magenta,green \"npm:dev:server\" \"npm:dev:web\" \"npm:dev:voice\"",
+    "dev": "concurrently -k -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:web": "vite",
     "build": "vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "dev:voice": "node scripts/voice-engine.mjs",
-    "voice:setup": "bash scripts/voice-setup.sh"
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

@@ -182,3 +182,29 @@ describe("legal agents and categories", () => {
     for (const t of TEMPLATES.filter((t) => t.id !== "genny")) expect(CATEGORIES).toContain(t.category);
   });
 });
+
+describe("removed voice features", () => {
+  it("clears calls, call notes and voice settings from a saved workspace", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mp-")), "workspace.json");
+    const seeded = new Store(null);
+    const ws = JSON.parse(JSON.stringify(seeded.workspace));
+    ws.agents[0].voice = { kind: "custom", id: "v1" };
+    ws.voices = [{ id: "v1", name: "Benson" }];
+    ws.channels.push({ id: "call_1", kind: "call", name: "Call with Benson", topic: "", humanIds: [], agentIds: [], createdAt: 1 });
+    const messages = [
+      { id: "m1", channelId: "call_1", authorKind: "human", authorId: "u_me", content: "hi", createdAt: 1 },
+      { id: "m2", channelId: "c_dm_genny", authorKind: "system", authorId: "system", content: "📞 Call", callId: "call_1", createdAt: 2 },
+      { id: "m3", channelId: "c_dm_genny", authorKind: "human", authorId: "u_me", content: "keep me", createdAt: 3 },
+    ];
+    fs.writeFileSync(file, JSON.stringify({ workspace: ws, messages }));
+
+    const store = new Store(file);
+    expect(store.channel("call_1")).toBeUndefined();
+    expect(store.channelMessages("c_dm_genny").map((m) => m.content)).toEqual(["keep me"]);
+    expect(store.workspace.agents[0]).not.toHaveProperty("voice");
+    expect(store.workspace).not.toHaveProperty("voices");
+  });
+});

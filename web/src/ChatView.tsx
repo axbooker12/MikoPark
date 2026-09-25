@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { modelLabel } from "../../shared/models.ts";
 import type { Agent, Attachment, Channel, Message, Workspace } from "../../shared/types.ts";
 import { followUpRequest, splitFollowUp } from "../../shared/followup.ts";
@@ -7,7 +7,6 @@ import { MembersModal } from "./Modals.tsx";
 import { Composer, iconFor } from "./Composer.tsx";
 import { formatBytes } from "./files.ts";
 import { Avatar, Md, clock } from "./ui.tsx";
-import { stopSpeaking, useSpokenReplies, useVoicePrefs } from "./voice.ts";
 
 interface Props {
   ws: Workspace;
@@ -18,17 +17,12 @@ interface Props {
   onMenu: () => void;
   onOpenAgent: (id: string) => void;
   onHire: () => void;
-  onCall: () => void;
 }
 
-export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onOpenAgent, onHire, onCall }: Props) {
-  const voice = useVoicePrefs();
+export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onOpenAgent, onHire }: Props) {
   const [dragging, setDragging] = useState(false);
   const [dropped, setDropped] = useState<File[] | null>(null);
 
-  // Read agent replies aloud as they finish (only ones that finish while this conversation is open).
-  useSpokenReplies(messages, ws.agents, voice.readAloud);
-  useEffect(() => () => stopSpeaking(), [channel.id]);
   const [showMembers, setShowMembers] = useState(false);
   const dmAgent = channel.kind === "dm" ? ws.agents.find((a) => a.id === channel.agentIds[0]) : undefined;
   const members = channel.agentIds.map((id) => ws.agents.find((a) => a.id === id)).filter((a): a is Agent => !!a);
@@ -81,11 +75,6 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
             </span>
           </div>
         )}
-        {dmAgent && (
-          <button className="call-btn" onClick={onCall} title={`Start a voice call with ${dmAgent.name}`}>
-            📞 <span>Call</span>
-          </button>
-        )}
         {channel.kind === "channel" && (
           <button className="members-btn" onClick={() => setShowMembers(true)} title="Agents in this channel">
             <span className="stack">
@@ -132,12 +121,9 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
         dmAgent={dmAgent}
         mode={mode}
         serverModel={serverModel}
-        voice={voice}
         onHire={onHire}
         dropped={dropped}
         onDropHandled={() => setDropped(null)}
-        onSent={() => {}}
-        onCall={dmAgent ? onCall : undefined}
       />
       {showMembers && <MembersModal ws={ws} channel={channel} onClose={() => setShowMembers(false)} />}
     </section>

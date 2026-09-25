@@ -5,17 +5,13 @@ import { AgentProfileModal, DepartmentsModal, NewChannelModal } from "./Modals.t
 import { Sidebar } from "./Sidebar.tsx";
 import { TasksView } from "./TasksView.tsx";
 import { useWorkspace } from "./useWorkspace.ts";
-import { api } from "./api.ts";
-import { CallView } from "./CallView.tsx";
-import { TranscriptsView } from "./TranscriptsView.tsx";
 
-export type View = { kind: "channel"; id: string } | { kind: "tasks" } | { kind: "memory" } | { kind: "transcripts"; id?: string };
+export type View = { kind: "channel"; id: string } | { kind: "tasks" } | { kind: "memory" };
 type ModalState = { kind: "hire" } | { kind: "new-channel" } | { kind: "agent"; id: string } | null;
 
 function parseHash(): View | null {
   const [kind, id] = location.hash.replace(/^#\/?/, "").split("/");
   if (kind === "tasks" || kind === "memory") return { kind };
-  if (kind === "transcripts") return id ? { kind, id } : { kind };
   if (kind === "c" && id) return { kind: "channel", id };
   return null;
 }
@@ -30,29 +26,8 @@ export function App() {
   const go = useCallback((v: View) => {
     setView(v);
     setNavOpen(false);
-    const hash = v.kind === "channel" ? `#/c/${v.id}` : v.kind === "transcripts" && v.id ? `#/transcripts/${v.id}` : `#/${v.kind}`;
-    history.replaceState(null, "", hash);
+    history.replaceState(null, "", v.kind === "channel" ? `#/c/${v.id}` : `#/${v.kind}`);
   }, []);
-
-  // Links inside messages (like "Open transcript") change the hash; follow them.
-  useEffect(() => {
-    const onHash = () => {
-      const v = parseHash();
-      if (v) go(v);
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, [go]);
-
-  const [callId, setCallId] = useState<string | null>(null);
-  const [callError, setCallError] = useState<string | null>(null);
-  const startCall = (channelId: string) => {
-    setCallError(null);
-    api.startCall(channelId).then(
-      (c) => setCallId(c.id),
-      (e) => setCallError((e as Error).message),
-    );
-  };
 
   const [pendingDmFor, setPendingDmFor] = useState<string | null>(null);
   const seenChannels = useRef(new Set<string>());
@@ -108,17 +83,6 @@ export function App() {
         {!state.connected && <div className="banner warn">Reconnecting to the server…</div>}
         {view.kind === "tasks" && <TasksView ws={ws} onMenu={() => setNavOpen(true)} onGo={go} />}
         {view.kind === "memory" && <MemoryView ws={ws} onMenu={() => setNavOpen(true)} />}
-        {view.kind === "transcripts" && (
-          <TranscriptsView ws={ws} messages={state.messages} openId={view.id} onGo={go} onMenu={() => setNavOpen(true)} />
-        )}
-        {callError && (
-          <div className="banner warn">
-            Couldn't start the call: {callError}{" "}
-            <button className="link small" onClick={() => setCallError(null)}>
-              Dismiss
-            </button>
-          </div>
-        )}
         {channel && (
           <ChatView
             key={channel.id}
@@ -130,19 +94,9 @@ export function App() {
             onMenu={() => setNavOpen(true)}
             onOpenAgent={openAgent}
             onHire={() => setModal({ kind: "hire" })}
-            onCall={() => startCall(channel.id)}
           />
         )}
       </main>
-      {callId && ws.channels.some((c) => c.id === callId) && (
-        <CallView
-          key={callId}
-          ws={ws}
-          call={ws.channels.find((c) => c.id === callId)!}
-          messages={state.messages[callId] ?? []}
-          onClose={() => setCallId(null)}
-        />
-      )}
       {modal?.kind === "hire" && (
         <DepartmentsModal
           ws={ws}
