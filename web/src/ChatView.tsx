@@ -32,7 +32,7 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
     for (const m of messages) {
       if (m.streaming || spoken.current.has(m.id)) continue;
       spoken.current.add(m.id);
-      if (voice.readAloud && m.authorKind === "agent" && m.content && !m.error) speak(m.content);
+      if (voice.readAloud && m.authorKind === "agent" && m.content && !m.error) speak(m.content, ws.agents.find((a) => a.id === m.authorId)?.voice);
     }
   }, [messages, voice.readAloud]);
   useEffect(() => () => stopSpeaking(), [channel.id]);

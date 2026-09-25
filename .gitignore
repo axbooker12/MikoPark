@@ -3,3 +3,5 @@ dist
 data
 .env
 *.log
+voice-engine/.venv
+__pycache__

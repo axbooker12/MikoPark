@@ -22,6 +22,9 @@ hand them tasks, and let them build up shared team memory.
 - **Slash commands:** `/task`, `/remember`, `/summarize`, `/model`, `/voice`, `/hire`, `/clear`, `/help`.
 - **Voice:** dictate into the message box, or go hands-free (sends when you pause, reads replies aloud, listens again).
   Uses the browser's built-in speech recognition (Chrome, Edge, Safari).
+- **Custom voices:** upload a short recording (WAV, MP3, M4A…) and an agent reads its replies in that voice, using a
+  free, local voice engine ([Chatterbox](https://github.com/resemble-ai/chatterbox), MIT). Agents can also use any of the
+  computer's built-in voices. Set it in the agent's profile under **Voice**.
 - **Model and thinking:** pick Opus 5.5, Opus 5, Sonnet 5, Fable 5.1 or Haiku 4.5 per conversation, plus thinking depth
   (Auto, Quick, Balanced, Deep, Deepest), or make a choice the workspace default. Replies show which model wrote them.
 - **Live streaming:** replies stream token by token over Server-Sent Events, with working status such as "Searching the web…".
@@ -37,13 +40,30 @@ cp .env.example .env         # add ANTHROPIC_API_KEY to use real agents
 npm run dev                  # API on :3001, web on http://localhost:5173
 ```
 
+### Custom voices (optional)
+
+The voice engine runs on your own computer, so audio never leaves it and there's no per-use cost. It needs Python 3.11
+(`brew install python@3.11`, or `brew install uv`). Install it once:
+
+```bash
+npm run voice:setup
+```
+
+After that, `npm run dev` starts it automatically. The first start downloads the voice model (a few GB), so give it a few
+minutes. Then open an agent's profile, choose **＋ Add a voice from a recording**, and pick your sample. About 10 seconds to
+3 minutes of clear speech from one person works best. Only use recordings of people who have agreed to it.
+
+Engine settings (environment variables): `VOICE_MODEL` (`turbo` default, `standard`, or `nano` for slower computers),
+`VOICE_DEVICE` (`auto`, `mps`, `cuda`, `cpu`), `VOICE_ENGINE_PORT` (5055). If the engine isn't running, agents fall back
+to the computer's built-in voices.
+
 Production:
 
 ```bash
 npm run build && npm start   # serves the app and API on http://localhost:3001
 ```
 
-Workspace data is saved to `data/workspace.json`, and uploaded files to `data/uploads/`. Delete the `data` folder to start fresh.
+Workspace data is saved to `data/workspace.json`, uploaded files to `data/uploads/`, and voice samples to `data/voices/`. Delete the `data` folder to start fresh.
 
 ## Configuration
 

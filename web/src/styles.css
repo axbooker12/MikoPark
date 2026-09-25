@@ -488,3 +488,13 @@ legend { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
 }
 .popover > * { flex-shrink: 0; }
 .popover .link { text-align: left; }
+
+/* ---------- voice picker ---------- */
+.voice-picker { display: grid; gap: 8px; }
+.voice-picker select { flex: 1; min-width: 0; }
+.voice-picker .row > button { flex: none; }
+.voice-status { margin: 0; }
+.voice-status a { color: var(--accent-strong); }
+.voice-add input { flex: 1; min-width: 0; }
+.voice-picker > .link { justify-self: start; text-align: left; margin-left: -4px; }
+button.link.danger { color: var(--danger); padding: 0; }

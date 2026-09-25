@@ -1,5 +1,6 @@
 // Browser speech: dictation via the Web Speech API, and reading replies aloud via speech synthesis.
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AgentVoice } from "../../shared/types.ts";
 
 // The Web Speech API isn't in every TypeScript DOM lib, so declare the small part we use.
 interface RecognitionResult {
@@ -80,7 +81,8 @@ export function speakableText(markdown: string): string {
     .replace(/^[ \t]*[-*+][ \t]+/gm, "")
     .replace(/^[ \t]*\|.*\|[ \t]*$/gm, "")
     .replace(/[*_~>#|]/g, "")
-    .replace(/\n{2,}/g, ". ")
+    .replace(/\p{Extended_Pictographic}\uFE0F?/gu, "")
+    .replace(/([.!?:;])?[ \t]*\n{2,}\s*/g, (_m, p: string | undefined) => (p ? `${p} ` : ". "))
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -88,26 +90,160 @@ export function speakableText(markdown: string): string {
 const speakingListeners = new Set<(on: boolean) => void>();
 let speakingNow = false;
 function setSpeaking(on: boolean) {
+  if (on === speakingNow) return;
   speakingNow = on;
   speakingListeners.forEach((fn) => fn(on));
 }
 
-export function speak(markdown: string) {
-  if (!speechOutputSupported) return;
+/** Who is talking: an agent's voice setting, or nothing for the browser default. */
+export type SpeakVoice = AgentVoice | undefined;
+
+// Everything spoken goes through one queue so replies never talk over each other.
+let queue: Promise<void> = Promise.resolve();
+let generation = 0; // bumped by stopSpeaking() to cancel queued and in-flight speech
+let current: { audio?: HTMLAudioElement; abort?: AbortController } = {};
+
+export function speak(markdown: string, voice?: SpeakVoice) {
   const text = speakableText(markdown);
   if (!text) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.onstart = () => setSpeaking(true);
-  u.onend = u.onerror = () => {
-    if (!window.speechSynthesis.speaking) setSpeaking(false);
-  };
-  window.speechSynthesis.speak(u);
+  const gen = generation;
+  queue = queue.then(async () => {
+    if (gen !== generation) return;
+    setSpeaking(true);
+    try {
+      if (voice?.kind === "custom" && (await engineRunning())) {
+        const ok = await speakWithEngine(text, voice.id, gen);
+        if (ok || gen !== generation) return;
+      }
+      await speakWithBrowser(text, voice?.kind === "system" ? voice.name : undefined, gen);
+    } finally {
+      if (gen === generation) setSpeaking(false);
+    }
+  });
 }
 
 export function stopSpeaking() {
-  if (!speechOutputSupported) return;
-  window.speechSynthesis.cancel();
+  generation++;
+  current.abort?.abort();
+  current.audio?.pause();
+  current = {};
+  if (speechOutputSupported) window.speechSynthesis.cancel();
   setSpeaking(false);
+}
+
+/** Splits text into sentence-sized chunks so the first one can start playing while the rest generate. */
+export function chunkText(text: string, max = 280): string[] {
+  const sentences = text.match(/[^.!?]+[.!?]+["')\]]*\s*|[^.!?]+$/g) ?? [text];
+  const chunks: string[] = [];
+  let cur = "";
+  for (const s of sentences) {
+    if (cur && (cur + s).length > max) {
+      chunks.push(cur.trim());
+      cur = "";
+    }
+    cur += s;
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks.flatMap((c) => (c.length <= 1000 ? [c] : c.match(/[\s\S]{1,1000}/g)!));
+}
+
+/** Plays text in a custom voice. Returns false if the engine can't do it (caller falls back). */
+async function speakWithEngine(text: string, voiceId: string, gen: number): Promise<boolean> {
+  const chunks = chunkText(text);
+  const fetchChunk = (chunk: string) => {
+    const abort = new AbortController();
+    current.abort = abort;
+    return fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voiceId, text: chunk }),
+      signal: abort.signal,
+    }).then(async (res) => {
+      if (res.status === 503) engineUp = false;
+      if (!res.ok) throw new Error(`tts ${res.status}`);
+      return URL.createObjectURL(await res.blob());
+    });
+  };
+  try {
+    let next = fetchChunk(chunks[0]);
+    for (let i = 0; i < chunks.length; i++) {
+      const url = await next;
+      if (gen !== generation) return true;
+      if (i + 1 < chunks.length) next = fetchChunk(chunks[i + 1]); // generate ahead while this one plays
+      await playUrl(url, gen);
+      URL.revokeObjectURL(url);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function playUrl(url: string, gen: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (gen !== generation) return resolve();
+    const audio = new Audio(url);
+    current.audio = audio;
+    audio.onended = audio.onerror = audio.onpause = () => resolve();
+    audio.play().catch(() => resolve());
+  });
+}
+
+function speakWithBrowser(text: string, voiceName: string | undefined, gen: number): Promise<void> {
+  if (!speechOutputSupported || gen !== generation) return Promise.resolve();
+  return new Promise((resolve) => {
+    const u = new SpeechSynthesisUtterance(text);
+    const match = voiceName && window.speechSynthesis.getVoices().find((v) => v.name === voiceName);
+    if (match) u.voice = match;
+    u.onend = u.onerror = () => resolve();
+    window.speechSynthesis.speak(u);
+  });
+}
+
+// ---- voice engine status --------------------------------------------------------
+
+let engineUp: boolean | null = null;
+let engineCheckedAt = 0;
+
+async function engineRunning(): Promise<boolean> {
+  if (engineUp !== null && Date.now() - engineCheckedAt < 30_000) return engineUp;
+  try {
+    const res = await fetch("/api/tts/status");
+    engineUp = res.ok && ((await res.json()) as { running: boolean }).running;
+  } catch {
+    engineUp = false;
+  }
+  engineCheckedAt = Date.now();
+  return engineUp;
+}
+
+export function useEngineStatus() {
+  const [status, setStatus] = useState<{ running: boolean; model?: string; device?: string } | null>(null);
+  const refresh = useCallback(() => {
+    fetch("/api/tts/status")
+      .then((r) => r.json())
+      .then((s) => {
+        engineUp = s.running;
+        engineCheckedAt = Date.now();
+        setStatus(s);
+      })
+      .catch(() => setStatus({ running: false }));
+  }, []);
+  useEffect(refresh, [refresh]);
+  return { status, refresh };
+}
+
+/** The computer's built-in voices (they load asynchronously in some browsers). */
+export function useSystemVoices(): SpeechSynthesisVoice[] {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => (speechOutputSupported ? window.speechSynthesis.getVoices() : []));
+  useEffect(() => {
+    if (!speechOutputSupported) return;
+    const load = () => setVoices(window.speechSynthesis.getVoices());
+    load();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+  return voices;
 }
 
 export function useSpeaking(): boolean {

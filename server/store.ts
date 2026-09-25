@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type {
   Agent,
+  AgentVoice,
   AuthorKind,
   Channel,
   MemoryItem,
@@ -11,10 +12,12 @@ import type {
   ServerEvent,
   Task,
   TaskStatus,
+  Voice,
   Workspace,
 } from "../shared/types.ts";
 import { GENNY_TEMPLATE_ID, LEGACY_NAMES, findTemplate } from "./templates.ts";
 import { UploadStore } from "./uploads.ts";
+import { VoiceSamples } from "./voices.ts";
 import { DEFAULT_MODEL, EFFORTS, findModel, type Effort } from "../shared/models.ts";
 
 interface DB {
@@ -139,12 +142,14 @@ export class Store extends EventEmitter {
   private saveTimer: NodeJS.Timeout | null = null;
 
   readonly uploads: UploadStore;
+  readonly voiceSamples: VoiceSamples;
 
   constructor(private file: string | null) {
     super();
     this.setMaxListeners(0);
     this.db = this.load();
     this.uploads = new UploadStore(file ? path.join(path.dirname(file), "uploads") : null);
+    this.voiceSamples = new VoiceSamples(file ? path.join(path.dirname(file), "voices") : null);
   }
 
   private load(): DB {
@@ -298,7 +303,7 @@ export class Store extends EventEmitter {
     return agent;
   }
 
-  updateAgent(id: string, patch: Partial<Pick<Agent, "name" | "role" | "instructions" | "webSearch">>): Agent {
+  updateAgent(id: string, patch: Partial<Pick<Agent, "name" | "role" | "instructions" | "webSearch">> & { voice?: AgentVoice | null }): Agent {
     const agent = this.agent(id);
     if (!agent) throw new Error("Agent not found");
     if (patch.name !== undefined) {
@@ -312,6 +317,13 @@ export class Store extends EventEmitter {
     if (patch.role !== undefined) agent.role = patch.role;
     if (patch.instructions !== undefined) agent.instructions = patch.instructions;
     if (patch.webSearch !== undefined) agent.webSearch = patch.webSearch;
+    if (patch.voice !== undefined) {
+      if (patch.voice === null) delete agent.voice;
+      else if (patch.voice.kind === "custom" && this.voice(patch.voice.id)) agent.voice = { kind: "custom", id: patch.voice.id };
+      else if (patch.voice.kind === "system" && typeof patch.voice.name === "string" && patch.voice.name.trim())
+        agent.voice = { kind: "system", name: patch.voice.name.slice(0, 200) };
+      else throw new Error("Unknown voice");
+    }
     this.workspaceChanged();
     return agent;
   }
@@ -359,6 +371,37 @@ export class Store extends EventEmitter {
     this.db.messages = this.db.messages.filter((m) => m.channelId !== channelId);
     this.persist();
     this.emitEvent({ type: "snapshot", workspace: this.workspace, messages: this.snapshotMessages(), mode: "live" });
+  }
+
+  // ---- voices ----------------------------------------------------------------
+
+  voice(id: string) {
+    return this.workspace.voices?.find((v) => v.id === id);
+  }
+
+  addVoice(name: string, fileName: string, data: Buffer): Voice {
+    const voice = this.voiceSamples.save(name, fileName, data);
+    (this.workspace.voices ??= []).push(voice);
+    this.workspaceChanged();
+    return voice;
+  }
+
+  renameVoice(id: string, name: string): Voice {
+    const voice = this.voice(id);
+    if (!voice) throw new Error("Voice not found");
+    if (!name.trim()) throw new Error("Name is required");
+    voice.name = name.trim().slice(0, 60);
+    this.workspaceChanged();
+    return voice;
+  }
+
+  removeVoice(id: string) {
+    const voice = this.voice(id);
+    if (!voice) return;
+    this.workspace.voices = this.workspace.voices!.filter((v) => v.id !== id);
+    for (const a of this.workspace.agents) if (a.voice?.kind === "custom" && a.voice.id === id) delete a.voice;
+    this.voiceSamples.remove(voice);
+    this.workspaceChanged();
   }
 
   // ---- channels ------------------------------------------------------------

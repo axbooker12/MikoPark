@@ -4,8 +4,9 @@ import { serverDefaultModel, type Store } from "./store.ts";
 import type { Team } from "./team.ts";
 import { TEMPLATES } from "./templates.ts";
 import { MAX_UPLOAD_BYTES } from "./uploads.ts";
+import { MAX_SAMPLE_BYTES, VoiceEngine, VoiceEngineDown } from "./voices.ts";
 
-export function createApp(store: Store, team: Team) {
+export function createApp(store: Store, team: Team, voiceEngine = new VoiceEngine()) {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
   const api = express.Router();
@@ -88,8 +89,51 @@ export function createApp(store: Store, team: Team) {
   });
 
   api.patch("/agents/:id", (req, res) => {
-    const { name, role, instructions, webSearch } = req.body ?? {};
-    res.json(store.updateAgent(req.params.id, { name, role, instructions, webSearch }));
+    const { name, role, instructions, webSearch, voice } = req.body ?? {};
+    res.json(store.updateAgent(req.params.id, { name, role, instructions, webSearch, voice }));
+  });
+
+  // ---- voices ----------------------------------------------------------------
+
+  api.post("/voices", express.raw({ type: () => true, limit: MAX_SAMPLE_BYTES }), (req, res) => {
+    const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    res.status(201).json(store.addVoice(String(req.query.name ?? ""), String(req.query.file ?? ""), data));
+  });
+
+  api.patch("/voices/:id", (req, res) => {
+    res.json(store.renameVoice(req.params.id, String(req.body?.name ?? "")));
+  });
+
+  api.delete("/voices/:id", (req, res) => {
+    store.removeVoice(req.params.id);
+    res.status(204).end();
+  });
+
+  api.get("/voices/:id/sample", (req, res) => {
+    const voice = store.voice(req.params.id);
+    if (!voice) return void res.status(404).json({ error: "Voice not found" });
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.sendFile(store.voiceSamples.pathFor(voice));
+  });
+
+  api.get("/tts/status", async (_req, res) => {
+    res.json(await voiceEngine.status());
+  });
+
+  // Speaks text in a custom voice via the local engine. 503 means "use the built-in voice instead".
+  api.post("/tts", async (req, res) => {
+    const voice = store.voice(String(req.body?.voiceId ?? ""));
+    const text = String(req.body?.text ?? "").trim().slice(0, 1000);
+    if (!voice) return void res.status(404).json({ error: "Voice not found" });
+    if (!text) return void res.status(400).json({ error: "Nothing to say" });
+    try {
+      const audio = await voiceEngine.speak(text, store.voiceSamples.pathFor(voice));
+      res.setHeader("Content-Type", "audio/wav");
+      res.setHeader("Cache-Control", "no-store");
+      res.end(audio);
+    } catch (err) {
+      res.status(err instanceof VoiceEngineDown ? 503 : 502).json({ error: (err as Error).message });
+    }
   });
 
   api.delete("/agents/:id", (req, res) => {

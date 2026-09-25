@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { CATEGORIES, DEPARTMENT_ICONS, type AgentTemplate, type Channel, type Workspace } from "../../shared/types.ts";
+import { useEffect, useRef, useState } from "react";
+import { CATEGORIES, DEPARTMENT_ICONS, type AgentTemplate, type AgentVoice, type Channel, type Workspace } from "../../shared/types.ts";
 import { api } from "./api.ts";
+import { speak, stopSpeaking, useEngineStatus, useSystemVoices } from "./voice.ts";
 import { Avatar, Modal } from "./ui.tsx";
 
 const DEPT_KEY = "mikopark:department";
@@ -236,6 +237,7 @@ export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; age
   const [role, setRole] = useState(agent?.role ?? "");
   const [instructions, setInstructions] = useState(agent?.instructions ?? "");
   const [webSearch, setWebSearch] = useState(agent?.webSearch ?? false);
+  const [voice, setVoice] = useState<AgentVoice | undefined>(agent?.voice);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -247,7 +249,7 @@ export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; age
 
   const save = async () => {
     try {
-      await api.updateAgent(agent.id, { name, role, instructions, webSearch });
+      await api.updateAgent(agent.id, { name, role, instructions, webSearch, voice: voice ?? null });
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -290,6 +292,7 @@ export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; age
         <label className="check">
           <input type="checkbox" checked={webSearch} onChange={(e) => setWebSearch(e.target.checked)} /> Can search the web and read pages
         </label>
+        <VoicePicker ws={ws} agentName={name || agent.name} value={voice} onChange={setVoice} onError={setError} />
         {error && <p className="form-error">{error}</p>}
         <div className="row">
           {!agent.builtIn && (
@@ -305,5 +308,139 @@ export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; age
         </div>
       </form>
     </Modal>
+  );
+}
+
+function encodeVoice(v: AgentVoice | undefined) {
+  return !v ? "" : v.kind === "custom" ? `custom:${v.id}` : `system:${v.name}`;
+}
+function decodeVoice(s: string): AgentVoice | undefined {
+  if (s.startsWith("custom:")) return { kind: "custom", id: s.slice(7) };
+  if (s.startsWith("system:")) return { kind: "system", name: s.slice(7) };
+  return undefined;
+}
+
+function VoicePicker(props: {
+  ws: Workspace;
+  agentName: string;
+  value: AgentVoice | undefined;
+  onChange: (v: AgentVoice | undefined) => void;
+  onError: (e: string | null) => void;
+}) {
+  const { ws, agentName, value, onChange, onError } = props;
+  const systemVoices = useSystemVoices();
+  const { status } = useEngineStatus();
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const custom = ws.voices ?? [];
+  const lang = (navigator.language || "en").split("-")[0];
+  const sorted = [...systemVoices].sort(
+    (a, b) => Number(b.lang.startsWith(lang)) - Number(a.lang.startsWith(lang)) || a.name.localeCompare(b.name),
+  );
+  const selectedCustom = value?.kind === "custom" ? custom.find((v) => v.id === value.id) : undefined;
+
+  const preview = () => {
+    stopSpeaking();
+    speak(`Hi, I'm ${agentName}. This is how I'll sound when I read my replies to you.`, value);
+  };
+
+  const addSample = async () => {
+    if (!pendingFile) return;
+    setBusy(true);
+    onError(null);
+    try {
+      const v = await api.addVoice(pendingFile, newName);
+      onChange({ kind: "custom", id: v.id });
+      setPendingFile(null);
+      setNewName("");
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeSample = async () => {
+    if (!selectedCustom || !confirm(`Delete the voice "${selectedCustom.name}"? Any agent using it goes back to the default voice.`)) return;
+    await api.deleteVoice(selectedCustom.id);
+    onChange(undefined);
+  };
+
+  return (
+    <fieldset className="voice-picker">
+      <legend>Voice</legend>
+      <div className="row">
+        <select value={encodeVoice(value)} onChange={(e) => onChange(decodeVoice(e.target.value))} aria-label="Voice">
+          <option value="">Default voice</option>
+          {custom.length > 0 && (
+            <optgroup label="Your voices">
+              {custom.map((v) => (
+                <option key={v.id} value={`custom:${v.id}`}>
+                  {v.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {sorted.length > 0 && (
+            <optgroup label="This computer's voices">
+              {sorted.map((v) => (
+                <option key={v.voiceURI} value={`system:${v.name}`}>
+                  {v.name} ({v.lang})
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        <button type="button" onClick={preview}>
+          ▶ Preview
+        </button>
+      </div>
+
+      {selectedCustom && (
+        <p className="muted small voice-status">
+          {status?.running
+            ? `Custom voice engine is running (${status.model}${status.device ? ` on ${status.device}` : ""}).`
+            : "The custom voice engine isn't running, so this agent uses the default voice for now. Run npm run voice:setup once, then restart npm run dev."}{" "}
+          <a href={`/api/voices/${selectedCustom.id}/sample`} target="_blank" rel="noreferrer">
+            Play original sample
+          </a>{" "}
+          ·{" "}
+          <button type="button" className="link small danger" onClick={() => void removeSample()}>
+            Delete voice
+          </button>
+        </p>
+      )}
+
+      {pendingFile ? (
+        <div className="row voice-add">
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Voice name, e.g. Benson" aria-label="Voice name" autoFocus />
+          <button type="button" className="primary" disabled={busy} onClick={() => void addSample()}>
+            {busy ? "Adding…" : "Add voice"}
+          </button>
+          <button type="button" onClick={() => setPendingFile(null)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="link small" onClick={() => fileInput.current?.click()}>
+          ＋ Add a voice from a recording (WAV, MP3, M4A…)
+        </button>
+      )}
+      <input
+        ref={fileInput}
+        type="file"
+        accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.aiff"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          setPendingFile(f);
+          setNewName(f.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim());
+        }}
+      />
+    </fieldset>
   );
 }

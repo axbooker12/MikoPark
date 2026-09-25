@@ -186,3 +186,20 @@ describe("read-aloud text", async () => {
     );
   });
 });
+
+describe("speech chunking", async () => {
+  const { chunkText } = await import("../web/src/voice.ts");
+  it("splits on sentences and keeps chunks short", () => {
+    const text = "One two three. Four five six! Seven eight nine? Ten.";
+    expect(chunkText(text, 30)).toEqual(["One two three. Four five six!", "Seven eight nine? Ten."]);
+    expect(chunkText("No punctuation here")).toEqual(["No punctuation here"]);
+    expect(chunkText("x".repeat(2500)).map((c) => c.length)).toEqual([1000, 1000, 500]);
+  });
+});
+
+describe("read-aloud punctuation", async () => {
+  const { speakableText } = await import("../web/src/voice.ts");
+  it("doesn't double up periods or read emoji", () => {
+    expect(speakableText("Done.\n\n> 💡 Tip here")).toBe("Done. Tip here");
+  });
+});
