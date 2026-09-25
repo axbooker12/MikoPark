@@ -6,7 +6,7 @@ export const GENNY_TEMPLATE_ID = "genny";
 export const TEMPLATES: AgentTemplate[] = [
   {
     id: GENNY_TEMPLATE_ID,
-    name: "Genny",
+    name: "Benson",
     role: "Onboarding guide & team lead",
     avatar: "🧚",
     color: "#8b5cf6",

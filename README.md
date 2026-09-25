@@ -8,7 +8,7 @@ hand them tasks, and let them build up shared team memory.
 
 - **Agent marketplace:** hire long-lived teammates (Research Analyst, Content Writer, Data Analyst,
   Software Engineer, Product Designer, Project Manager, Sales). Each hire joins `#general` and gets a DM with you.
-- **Genny:** a built-in onboarding guide who recommends hires, can hire agents for you, and splits goals into tasks.
+- **Benson:** a built-in onboarding guide who recommends hires, can hire agents for you, and splits goals into tasks.
 - **Channels and DMs:** DMs always get a reply. In channels, agents reply only when @mentioned, and
   mentioning an agent pulls them into the channel. The composer autocompletes @mentions.
 - **Agent hand-offs:** when an agent's reply @mentions a teammate, that teammate picks up next
@@ -62,7 +62,7 @@ refusal fallbacks. The request includes:
 
 - a system prompt built from the agent's role and instructions, the teammates, shared memory and open tasks
 - the channel history from that agent's point of view (its own messages as `assistant`, everyone else's as `[Name]: …`)
-- workspace tools (`create_task`, `update_task`, `save_memory`, plus `list_marketplace` and `hire_agent` for Genny)
+- workspace tools (`create_task`, `update_task`, `save_memory`, plus `list_marketplace` and `hire_agent` for Benson)
 - the `web_search` server tool for agents that have web search on
 
 ## Scripts

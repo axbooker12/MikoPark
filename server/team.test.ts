@@ -43,9 +43,9 @@ describe("Team routing", () => {
     const { store, brain, team } = setup();
     team.postHumanMessage("c_dm_genny", "hello");
     await team.idle();
-    expect(brain.calls.map((c) => c.agent)).toEqual(["Genny"]);
+    expect(brain.calls.map((c) => c.agent)).toEqual(["Benson"]);
     const msgs = store.channelMessages("c_dm_genny");
-    expect(msgs.at(-1)).toMatchObject({ authorKind: "agent", content: "hi from Genny", streaming: false });
+    expect(msgs.at(-1)).toMatchObject({ authorKind: "agent", content: "hi from Benson", streaming: false });
   });
 
   it("only replies in a channel when mentioned", async () => {
@@ -53,27 +53,27 @@ describe("Team routing", () => {
     team.postHumanMessage("c_general", "morning all");
     await team.idle();
     expect(brain.calls).toEqual([]);
-    team.postHumanMessage("c_general", "@Genny help");
+    team.postHumanMessage("c_general", "@Benson help");
     await team.idle();
-    expect(brain.calls.map((c) => c.agent)).toEqual(["Genny"]);
+    expect(brain.calls.map((c) => c.agent)).toEqual(["Benson"]);
   });
 
   it("hands off between agents via @mentions, adding them to the channel", async () => {
-    const { store, brain, team } = setup({ Genny: "Over to @Kai", Kai: "Done. @Genny fyi" });
+    const { store, brain, team } = setup({ Benson: "Over to @Kai", Kai: "Done. @Benson fyi" });
     const kai = store.hireAgent("engineer");
     const ch = store.createChannel("build", "", [store.workspace.agents[0].id]);
-    team.postHumanMessage(ch.id, "@Genny please build it");
+    team.postHumanMessage(ch.id, "@Benson please build it");
     await team.idle();
-    expect(brain.calls.map((c) => c.agent)).toEqual(["Genny", "Kai", "Genny", "Kai"]);
+    expect(brain.calls.map((c) => c.agent)).toEqual(["Benson", "Kai", "Benson", "Kai"]);
     expect(store.channel(ch.id)!.agentIds).toContain(kai.id);
   });
 
   it("caps hand-off chains", async () => {
-    const { brain, team, store } = setup({ Genny: "@Kai", Kai: "@Genny" });
+    const { brain, team, store } = setup({ Benson: "@Kai", Kai: "@Benson" });
     store.hireAgent("engineer");
-    team.postHumanMessage("c_general", "@Genny go");
+    team.postHumanMessage("c_general", "@Benson go");
     await team.idle();
-    expect(brain.calls.length).toBe(4); // human→Genny, then 3 hops
+    expect(brain.calls.length).toBe(4); // human→Benson, then 3 hops
   });
 
   it("runs a task and moves it to review", async () => {

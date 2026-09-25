@@ -73,7 +73,7 @@ function seed(): DB {
         authorKind: "agent",
         authorId: gennyAgent.id,
         content:
-          "Hi, I'm **Genny** 👋 I help you build your AI team.\n\n" +
+          `Hi, I'm **${genny.name}** 👋 I help you build your AI team.\n\n` +
           "Tell me what's on your plate this week — a launch, a report, a codebase, outreach — and I'll suggest who to hire, " +
           "set up tasks, and hand work to the right teammates.\n\n" +
           "You can also open **Hire agents** in the sidebar to browse the marketplace yourself.",
