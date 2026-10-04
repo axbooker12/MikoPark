@@ -1,8 +1,9 @@
 # Agent headshots
 
 MikoPark shows a photo for each agent when one is available. Use AI-generated headshots of people who
-don't exist (never photos of real people without their permission). Adobe Firefly works well and its
-images are cleared for commercial use.
+don't exist (never photos of real people without their permission). These steps use DaVinci.ai, but the
+prompts work in any image generator. If you use the photos outside your own workspace, check that your
+DaVinci plan allows commercial use.
 
 ## Two ways to add photos
 
@@ -11,11 +12,19 @@ images are cleared for commercial use.
 - **All at once:** save each image in `web/public/avatars/` using the file name in the table below
   (`.jpg`, `.png` or `.webp`), then restart `npm run dev`. Every agent of that role uses it.
 
-## Settings in Adobe Firefly (Text to Image)
+## Making a headshot in DaVinci.ai
 
-- **Content type:** Photo
-- **Aspect ratio:** Square (1:1)
-- Generate, pick the best of the four, and download.
+1. Open the image generator and pick a photorealistic model (Flux works well for portraits).
+2. Set the aspect ratio to **square (1:1)**.
+3. Paste a prompt from the table below, followed by the style text.
+4. Generate, pick the best result, and download it.
+5. Rename the file to the name in the **Save as** column.
+
+Tips:
+
+- Use the same model for every agent so the set looks like one company's photos.
+- Try two or three agents first. If you like the look, do the rest the same way.
+- If a face looks off (odd eyes, extra fingers in frame), just generate again.
 
 Add this style text to the end of every prompt so the set looks consistent:
 
