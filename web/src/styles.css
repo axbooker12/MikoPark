@@ -367,7 +367,7 @@ legend { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
 .dept-panel h3 { margin: 0; font-size: 18px; }
 .dept-note { background: var(--warn-bg); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; }
 .desk { display: grid; grid-template-columns: 48px 200px 1fr 150px; gap: 16px; align-items: center; padding: 14px 2px; border-top: 1px solid var(--border); }
-.desk-name { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.desk-name { display: flex; flex-direction: column; min-width: 0; overflow-wrap: break-word; }
 .desk-name small { color: var(--muted); }
 .desk-about p { margin: 0 0 6px; }
 .desk-action { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }

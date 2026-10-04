@@ -431,6 +431,14 @@ const KEYWORDS: Record<string, string[]> = {
   pm: ["plan", "project", "roadmap", "tasks", "deadline", "organize"],
   sales: ["sales", "outreach", "leads", "prospect", "customers", "pitch"],
   "search-strategist": ["seo", "search", "ranking", "google", "traffic", "chatgpt", "perplexity"],
+  "algorithmic-marketing": ["ecommerce", "e-commerce", "shopify", "store", "pricing", "promotion", "recommendation", "ltv", "conversion"],
+  "brand-strategist": ["brand", "positioning", "messaging", "tagline", "identity"],
+  "marketing-planner": ["campaign", "calendar", "marketing plan", "budget"],
+  accountant: ["accounting", "bookkeeping", "invoice", "tax", "cash flow", "p&l", "profit"],
+  "product-manager": ["product", "feature", "requirements", "prd", "prioritize"],
+  "doc-editor": ["edit", "proofread", "document", "report", "proposal"],
+  "email-assistant": ["inbox", "reply", "follow-up", "follow up"],
+  "slides-assistant": ["presentation", "deck", "slides", "pitch deck"],
 };
 
 export class DemoBrain implements Brain {

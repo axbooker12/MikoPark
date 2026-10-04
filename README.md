@@ -7,7 +7,9 @@ hand them tasks, and let them build up shared team memory.
 ## Release 1 features
 
 - **Departments:** hire long-lived specialists from eight departments (Marketing, Sales, Finance, Legal,
-  Operations, Research & Analytics, Engineering, Design). Each hire joins `#general` and gets a DM with you,
+  Operations, Research & Analytics, Engineering, Design), 18 roles in all, including an Algorithmic Marketing
+  Strategist for e-commerce, Brand Strategist, Marketing Planner, Accountant, Product Manager, Document Editor,
+  Email Assistant and Slides Assistant. Each hire joins `#general` and gets a DM with you,
   and the sidebar groups your team by department.
 - **Benson:** a built-in onboarding guide who recommends hires, can hire agents for you, and splits goals into tasks.
 - **Channels and DMs:** DMs always get a reply. In channels, agents reply only when @mentioned, and

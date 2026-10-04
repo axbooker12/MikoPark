@@ -208,3 +208,18 @@ describe("removed voice features", () => {
     expect(store.workspace).not.toHaveProperty("voices");
   });
 });
+
+describe("Genspark-style roles and the algorithmic marketing agent", () => {
+  it("can all be hired under role-based names, and fill the Finance department", () => {
+    const store = new Store(null);
+    const ids = ["algorithmic-marketing", "brand-strategist", "marketing-planner", "accountant", "product-manager", "doc-editor", "email-assistant", "slides-assistant"];
+    const names = ids.map((id) => store.hireAgent(id).name);
+    expect(names).toEqual(["AlgorithmicMarketingStrategist", "BrandStrategist", "MarketingPlanner", "Accountant", "ProductManager", "DocEditor", "EmailAssistant", "SlidesAssistant"]);
+    expect(TEMPLATES.some((t) => t.category === "Finance")).toBe(true);
+    const accountant = store.workspace.agents.find((a) => a.name === "Accountant")!;
+    expect(accountant.disclaimer).toMatch(/not professional accounting, tax or financial advice/);
+    const algo = store.workspace.agents.find((a) => a.name === "AlgorithmicMarketingStrategist")!;
+    expect(algo.instructions).toContain("Introduction to Algorithmic Marketing");
+    expect(algo.instructions).toMatch(/uplift/);
+  });
+});

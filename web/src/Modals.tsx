@@ -109,7 +109,7 @@ export function DepartmentsModal({ ws, onClose, onHired }: { ws: Workspace; onCl
                   <article key={t.id} className="desk">
                     <Avatar emoji={t.avatar} color={t.color} size={48} />
                     <div className="desk-name">
-                      <strong>{t.name}</strong>
+                      <strong>{wordBreaks(t.name)}</strong>
                       <small>{t.role}</small>
                     </div>
                     <div className="desk-about">
@@ -306,4 +306,9 @@ export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; age
       </form>
     </Modal>
   );
+}
+
+/** Lets long CamelCase names (AlgorithmicMarketingStrategist) wrap between words instead of mid-word. */
+function wordBreaks(name: string) {
+  return name.split(/(?<=[a-z])(?=[A-Z])/).flatMap((part, i) => (i ? [<wbr key={i} />, part] : [part]));
 }
