@@ -480,3 +480,8 @@ legend { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
 }
 .popover > * { flex-shrink: 0; }
 .popover .link { text-align: left; }
+
+/* ---------- agent photos ---------- */
+img.avatar.portrait { object-fit: cover; padding: 0; background: var(--bg-soft); display: inline-block; }
+.photo-actions { display: flex; gap: 10px; margin-top: 2px; }
+.photo-actions .link { padding: 0; }

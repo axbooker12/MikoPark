@@ -33,6 +33,7 @@ function seed(): DB {
     name: genny.name,
     role: genny.role,
     avatar: genny.avatar,
+    portrait: genny.portrait,
     color: genny.color,
     instructions: genny.instructions,
     webSearch: genny.webSearch,
@@ -121,6 +122,7 @@ export function syncTemplateNotes(ws: Workspace) {
     const t = findTemplate(agent.templateId);
     if (!t) continue;
     agent.color = t.color;
+    if (!agent.customPortrait) agent.portrait = t.portrait;
     agent.category = t.category;
     agent.disclaimer = t.disclaimer;
     agent.notice = t.notice;
@@ -287,6 +289,7 @@ export class Store extends EventEmitter {
       name,
       role: t.role,
       avatar: t.avatar,
+      portrait: t.portrait,
       color: t.color,
       instructions: t.instructions,
       webSearch: t.webSearch,
@@ -312,7 +315,7 @@ export class Store extends EventEmitter {
     return agent;
   }
 
-  updateAgent(id: string, patch: Partial<Pick<Agent, "name" | "role" | "instructions" | "webSearch">>): Agent {
+  updateAgent(id: string, patch: Partial<Pick<Agent, "name" | "role" | "instructions" | "webSearch">> & { portrait?: string | null }): Agent {
     const agent = this.agent(id);
     if (!agent) throw new Error("Agent not found");
     if (patch.name !== undefined) {
@@ -326,6 +329,20 @@ export class Store extends EventEmitter {
     if (patch.role !== undefined) agent.role = patch.role;
     if (patch.instructions !== undefined) agent.instructions = patch.instructions;
     if (patch.webSearch !== undefined) agent.webSearch = patch.webSearch;
+    if (patch.portrait !== undefined) {
+      if (patch.portrait === null) {
+        // Back to the default headshot (or the emoji when there is none).
+        delete agent.customPortrait;
+        const t = findTemplate(agent.templateId);
+        if (t?.portrait) agent.portrait = t.portrait;
+        else delete agent.portrait;
+      } else {
+        const id = /^\/api\/uploads\/([a-f0-9]{24})$/.exec(patch.portrait)?.[1];
+        if (!id || this.uploads.meta(id)?.kind !== "image") throw new Error("Upload a JPG, PNG, GIF or WebP photo");
+        agent.portrait = patch.portrait;
+        agent.customPortrait = true;
+      }
+    }
     this.workspaceChanged();
     return agent;
   }

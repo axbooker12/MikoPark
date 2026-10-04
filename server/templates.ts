@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { LEADERSHIP, type AgentTemplate } from "../shared/types.ts";
 
 const LEGAL_DISCLAIMER = "AI-generated, not legal advice. Confirm with a licensed attorney before acting on it.";
@@ -9,7 +12,7 @@ const CONFIDENTIALITY_NOTICE =
 // The agent marketplace. Each template becomes a long-lived teammate when hired.
 export const GENNY_TEMPLATE_ID = "genny";
 
-export const TEMPLATES: AgentTemplate[] = [
+const TEMPLATE_LIST: AgentTemplate[] = [
   {
     id: GENNY_TEMPLATE_ID,
     name: "Benson",
@@ -352,6 +355,24 @@ export const LEGACY_NAMES: Record<string, string> = {
   pm: "Pia",
   sales: "Sol",
 };
+
+/**
+ * Headshot photos: drop a file named after the agent's id (for example accountant.jpg) into web/public/avatars
+ * and it becomes that agent's default photo. Agents without one show their emoji.
+ */
+const PHOTO_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
+function headshotFor(id: string): string | undefined {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  for (const dir of [path.join(here, "..", "web", "public", "avatars"), path.join(here, "..", "dist", "web", "avatars")]) {
+    for (const ext of PHOTO_EXTENSIONS) if (fs.existsSync(path.join(dir, `${id}.${ext}`))) return `/avatars/${id}.${ext}`;
+  }
+  return undefined;
+}
+
+export const TEMPLATES: AgentTemplate[] = TEMPLATE_LIST.map((t) => {
+  const portrait = headshotFor(t.id);
+  return portrait ? { ...t, portrait } : t;
+});
 
 export function findTemplate(id: string): AgentTemplate | undefined {
   return TEMPLATES.find((t) => t.id === id);

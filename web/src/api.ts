@@ -36,7 +36,7 @@ export const api = {
     call<{ id: string }>("POST", "/channels", { name, topic, agentIds }),
   setMembers: (channelId: string, agentIds: string[]) => call("PUT", `/channels/${channelId}/members`, { agentIds }),
   hire: (templateId: string) => call<{ id: string }>("POST", "/agents", { templateId }),
-  updateAgent: (id: string, patch: { name?: string; role?: string; instructions?: string; webSearch?: boolean }) =>
+  updateAgent: (id: string, patch: { name?: string; role?: string; instructions?: string; webSearch?: boolean; portrait?: string | null }) =>
     call("PATCH", `/agents/${id}`, patch),
   fire: (id: string) => call("DELETE", `/agents/${id}`),
   createTask: (t: { title: string; description: string; assigneeAgentId: string | null }) => call("POST", "/tasks", t),

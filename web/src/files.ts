@@ -43,3 +43,24 @@ export async function prepareImage(file: File): Promise<{ blob: Blob; name: stri
   const name = blob.type === "image/jpeg" && !/\.jpe?g$/i.test(file.name) ? file.name.replace(/\.[^.]+$/, "") + ".jpg" : file.name;
   return { blob, name, type: blob.type };
 }
+
+/** Crops a photo to a centered square headshot (400×400 JPEG) for an agent's picture. */
+export async function squareHeadshot(file: File): Promise<Blob> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error("That image couldn't be opened. Try a JPG or PNG.");
+  }
+  const side = Math.min(bitmap.width, bitmap.height);
+  // Headshots usually have the face in the upper part, so bias the crop upward on tall images.
+  const sx = (bitmap.width - side) / 2;
+  const sy = bitmap.height > bitmap.width ? (bitmap.height - side) * 0.25 : 0;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 400;
+  canvas.getContext("2d")!.drawImage(bitmap, sx, sy, side, side, 0, 0, 400, 400);
+  bitmap.close();
+  const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.9));
+  if (!blob) throw new Error("Couldn't prepare the photo.");
+  return blob;
+}

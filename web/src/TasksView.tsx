@@ -110,7 +110,7 @@ function TaskCard({ ws, task, onGo }: { ws: Workspace; task: Task; onGo: (v: Vie
       <div className="task-meta">
         {agent ? (
           <span className="assignee">
-            <Avatar emoji={agent.avatar} color={agent.color} size={18} /> {agent.name}
+            <Avatar emoji={agent.avatar} portrait={agent.portrait} color={agent.color} size={18} /> {agent.name}
           </span>
         ) : (
           <span className="muted">Unassigned</span>

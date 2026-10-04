@@ -61,7 +61,7 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
         </button>
         {dmAgent ? (
           <button className="chat-title as-link" onClick={() => onOpenAgent(dmAgent.id)} title="View profile">
-            <Avatar emoji={dmAgent.avatar} color={dmAgent.color} size={28} />
+            <Avatar emoji={dmAgent.avatar} portrait={dmAgent.portrait} color={dmAgent.color} size={28} />
             <span>
               <strong>{dmAgent.name}</strong>
               <small>{dmAgent.role}</small>
@@ -79,7 +79,7 @@ export function ChatView({ ws, channel, messages, mode, serverModel, onMenu, onO
           <button className="members-btn" onClick={() => setShowMembers(true)} title="Agents in this channel">
             <span className="stack">
               {members.slice(0, 4).map((a) => (
-                <Avatar key={a.id} emoji={a.avatar} color={a.color} size={24} />
+                <Avatar key={a.id} emoji={a.avatar} portrait={a.portrait} color={a.color} size={24} />
               ))}
             </span>
             {members.length} agent{members.length === 1 ? "" : "s"}
@@ -179,7 +179,7 @@ function MessageRow({ ws, channel, message: m, compact, isLatest, onOpenAgent }:
         {!compact &&
           (agent ? (
             <button className="avatar-btn" onClick={() => onOpenAgent(agent.id)} aria-label={`${name} profile`}>
-              <Avatar emoji={avatar} color={agent.color} size={36} />
+              <Avatar emoji={avatar} portrait={agent.portrait} color={agent.color} size={36} />
             </button>
           ) : (
             <Avatar emoji={avatar} size={36} />

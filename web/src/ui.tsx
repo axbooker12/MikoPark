@@ -3,7 +3,20 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Agent } from "../../shared/types.ts";
 
-export function Avatar({ emoji, color, size = 32 }: { emoji: string; color?: string; size?: number }) {
+export function Avatar({ emoji, color, size = 32, portrait }: { emoji: string; color?: string; size?: number; portrait?: string }) {
+  if (portrait) {
+    return (
+      <img
+        className="avatar portrait"
+        src={portrait}
+        alt=""
+        width={size}
+        height={size}
+        style={{ width: size, height: size, borderColor: color }}
+        aria-hidden
+      />
+    );
+  }
   return (
     <span
       className="avatar"

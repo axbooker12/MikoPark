@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CATEGORIES, DEPARTMENT_ICONS, type AgentTemplate, type Channel, type Workspace } from "../../shared/types.ts";
 import { api } from "./api.ts";
+import { squareHeadshot } from "./files.ts";
 import { Avatar, Modal } from "./ui.tsx";
 
 const DEPT_KEY = "mikopark:department";
@@ -107,7 +108,7 @@ export function DepartmentsModal({ ws, onClose, onHired }: { ws: Workspace; onCl
                 const count = onTeam(t);
                 return (
                   <article key={t.id} className="desk">
-                    <Avatar emoji={t.avatar} color={t.color} size={48} />
+                    <Avatar emoji={t.avatar} portrait={t.portrait} color={t.color} size={48} />
                     <div className="desk-name">
                       <strong>{wordBreaks(t.name)}</strong>
                       <small>{t.role}</small>
@@ -220,7 +221,7 @@ function AgentPicker({ ws, value, onChange }: { ws: Workspace; value: string[]; 
             checked={value.includes(a.id)}
             onChange={(e) => onChange(e.target.checked ? [...value, a.id] : value.filter((id) => id !== a.id))}
           />
-          <Avatar emoji={a.avatar} color={a.color} size={24} />
+          <Avatar emoji={a.avatar} portrait={a.portrait} color={a.color} size={24} />
           <span>
             <strong>{a.name}</strong> <small className="muted">{a.role}</small>
           </span>
@@ -237,6 +238,8 @@ export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; age
   const [instructions, setInstructions] = useState(agent?.instructions ?? "");
   const [webSearch, setWebSearch] = useState(agent?.webSearch ?? false);
   const [error, setError] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!agent) onClose();
@@ -244,6 +247,20 @@ export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; age
   if (!agent) return null;
 
   const assigned = ws.tasks.filter((t) => t.assigneeAgentId === agent.id && t.status !== "done").length;
+
+  const uploadPhoto = async (file: File) => {
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      const headshot = await squareHeadshot(file);
+      const up = await api.upload(headshot, `${agent.name}.jpg`, "image/jpeg");
+      await api.updateAgent(agent.id, { portrait: `/api/uploads/${up.id}` });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
 
   const save = async () => {
     try {
@@ -266,12 +283,33 @@ export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; age
   return (
     <Modal title="Agent profile" onClose={onClose}>
       <div className="profile-head">
-        <Avatar emoji={agent.avatar} color={agent.color} size={56} />
+        <Avatar emoji={agent.avatar} portrait={agent.portrait} color={agent.color} size={72} />
         <div>
           <strong>{agent.name}</strong>
           <small className="muted">
             {agent.role} · {assigned} open task{assigned === 1 ? "" : "s"}
           </small>
+          <span className="photo-actions">
+            <button type="button" className="link small" disabled={photoBusy} onClick={() => photoInput.current?.click()}>
+              {photoBusy ? "Uploading…" : agent.portrait ? "Change photo" : "Add photo"}
+            </button>
+            {agent.customPortrait && (
+              <button type="button" className="link small" onClick={() => void api.updateAgent(agent.id, { portrait: null }).catch((e) => setError((e as Error).message))}>
+                Remove photo
+              </button>
+            )}
+          </span>
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void uploadPhoto(f);
+            }}
+          />
         </div>
       </div>
       <form className="stack-form" onSubmit={(e) => (e.preventDefault(), void save())}>

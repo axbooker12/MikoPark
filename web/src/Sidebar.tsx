@@ -96,7 +96,7 @@ export function Sidebar({ ws, view, messages, onGo, onHire, onNewChannel }: Prop
               .filter(([, c]) => !closed || isOpen(c.id))
               .map(([agent, c]) => (
                 <button key={c.id} className={`nav-item ${isOpen(c.id) ? "active" : ""}`} onClick={() => onGo({ kind: "channel", id: c.id })}>
-                  <Avatar emoji={agent.avatar} color={agent.color} size={20} />
+                  <Avatar emoji={agent.avatar} portrait={agent.portrait} color={agent.color} size={20} />
                   <span className="dm-name">{agent.name}</span>
                   {agent.name.toLowerCase() !== agent.role.replace(/[^a-z0-9]/gi, "").toLowerCase() && (
                     <span className="dm-role">{agent.role}</span>

@@ -48,7 +48,7 @@ export function MemoryView({ ws, onMenu }: { ws: Workspace; onMenu: () => void }
             const agent = m.source.kind === "agent" ? ws.agents.find((a) => a.id === m.source.id) : undefined;
             return (
               <li key={m.id}>
-                <Avatar emoji={agent?.avatar ?? ws.me.avatar} color={agent?.color} size={24} />
+                <Avatar emoji={agent?.avatar ?? ws.me.avatar} portrait={agent?.portrait} color={agent?.color} size={24} />
                 <div>
                   <p>{m.content}</p>
                   <small className="muted">

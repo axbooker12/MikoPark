@@ -88,8 +88,8 @@ export function createApp(store: Store, team: Team) {
   });
 
   api.patch("/agents/:id", (req, res) => {
-    const { name, role, instructions, webSearch } = req.body ?? {};
-    res.json(store.updateAgent(req.params.id, { name, role, instructions, webSearch }));
+    const { name, role, instructions, webSearch, portrait } = req.body ?? {};
+    res.json(store.updateAgent(req.params.id, { name, role, instructions, webSearch, portrait }));
   });
 
   api.delete("/agents/:id", (req, res) => {

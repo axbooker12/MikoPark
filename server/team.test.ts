@@ -223,3 +223,26 @@ describe("Genspark-style roles and the algorithmic marketing agent", () => {
     expect(algo.instructions).toMatch(/uplift/);
   });
 });
+
+describe("agent photos", () => {
+  it("accepts an uploaded image as an agent's photo and can reset it", () => {
+    const store = new Store(null);
+    const agent = store.hireAgent("accountant");
+    const img = store.uploads.save({ name: "a.jpg", type: "image/jpeg", data: Buffer.from("jpeg") });
+    store.updateAgent(agent.id, { portrait: `/api/uploads/${img.id}` });
+    expect(agent).toMatchObject({ portrait: `/api/uploads/${img.id}`, customPortrait: true });
+    // Template sync leaves an uploaded photo alone.
+    syncTemplateNotes(store.workspace);
+    expect(agent.portrait).toBe(`/api/uploads/${img.id}`);
+    store.updateAgent(agent.id, { portrait: null });
+    expect(agent.customPortrait).toBeUndefined();
+    expect(agent.portrait).toBeUndefined(); // no headshot file for this role yet → emoji
+  });
+  it("rejects anything that isn't an uploaded image", () => {
+    const store = new Store(null);
+    const agent = store.hireAgent("accountant");
+    const pdf = store.uploads.save({ name: "a.pdf", type: "application/pdf", data: Buffer.from("%PDF") });
+    expect(() => store.updateAgent(agent.id, { portrait: `/api/uploads/${pdf.id}` })).toThrow(/photo/);
+    expect(() => store.updateAgent(agent.id, { portrait: "https://evil.example/x.png" })).toThrow(/photo/);
+  });
+});

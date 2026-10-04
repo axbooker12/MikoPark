@@ -26,7 +26,9 @@ hand them tasks, and let them build up shared team memory.
   (Auto, Quick, Balanced, Deep, Deepest), or make a choice the workspace default. Replies show which model wrote them.
 - **Live streaming:** replies stream token by token over Server-Sent Events, with working status such as "Searching the web…".
 - **Web search** for research and sales agents; you can switch it on per agent in the profile.
-- **Agent profiles:** rename an agent, edit its role and instructions, or let it go.
+- **Agent profiles:** rename an agent, edit its role and instructions, add a headshot photo, or let it go.
+  Default headshots can be dropped into `web/public/avatars/`; see [docs/agent-headshots.md](docs/agent-headshots.md)
+  for file names and ready-made Adobe Firefly prompts.
 - **Demo mode:** with no API key, agents send scripted replies so you can click through the whole app.
 
 ## Quick start

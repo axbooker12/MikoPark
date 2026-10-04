@@ -14,7 +14,9 @@ export interface Agent {
   templateId: string;
   name: string;
   role: string;
-  avatar: string; // emoji
+  avatar: string; // emoji, used where a picture can't be shown
+  portrait?: string; // headshot photo URL (from web/public/avatars, or uploaded in the agent's profile)
+  customPortrait?: boolean; // the photo was uploaded for this agent, so template updates leave it alone
   color: string;
   instructions: string;
   webSearch: boolean;
@@ -89,6 +91,7 @@ export interface AgentTemplate {
   name: string;
   role: string;
   avatar: string;
+  portrait?: string;
   color: string;
   category: Category | typeof LEADERSHIP;
   tagline: string;
