@@ -13,7 +13,7 @@ import type {
   TaskStatus,
   Workspace,
 } from "../shared/types.ts";
-import { GENNY_TEMPLATE_ID, LEGACY_NAMES, findTemplate } from "./templates.ts";
+import { GUIDE_TEMPLATE_ID, LEGACY_NAMES, findTemplate } from "./templates.ts";
 import { UploadStore } from "./uploads.ts";
 import { DEFAULT_MODEL, EFFORTS, findModel, type Effort } from "../shared/models.ts";
 
@@ -26,7 +26,7 @@ export const newId = (prefix: string) => `${prefix}_${randomUUID().slice(0, 8)}`
 
 function seed(): DB {
   const me = { id: "u_me", name: "You", avatar: "🙂" };
-  const genny = findTemplate(GENNY_TEMPLATE_ID)!;
+  const genny = findTemplate(GUIDE_TEMPLATE_ID)!;
   const gennyAgent: Agent = {
     id: "a_genny",
     templateId: genny.id,
@@ -166,9 +166,10 @@ export class Store extends EventEmitter {
     if (this.file && fs.existsSync(this.file)) {
       try {
         const db = JSON.parse(fs.readFileSync(this.file, "utf8")) as DB;
-        // Workspaces saved before the guide became Benson still carry Genny's fairy avatar.
+        // Workspaces saved before the guide became Benson still carry Genny's template id and fairy avatar.
         const guide = db.workspace.agents.find((a) => a.builtIn);
-        if (guide?.avatar === "🧚") guide.avatar = findTemplate(GENNY_TEMPLATE_ID)!.avatar;
+        if (guide?.templateId === "genny") guide.templateId = GUIDE_TEMPLATE_ID;
+        if (guide?.avatar === "🧚") guide.avatar = findTemplate(GUIDE_TEMPLATE_ID)!.avatar;
         renameLegacyAgents(db.workspace);
         dropVoiceData(db);
         syncTemplateNotes(db.workspace);
@@ -275,7 +276,7 @@ export class Store extends EventEmitter {
   hireAgent(templateId: string, customName?: string): Agent {
     const t = findTemplate(templateId);
     if (!t) throw new Error(`Unknown template "${templateId}"`);
-    if (t.id === GENNY_TEMPLATE_ID) {
+    if (t.id === GUIDE_TEMPLATE_ID) {
       const guide = this.workspace.agents.find((a) => a.builtIn)?.name ?? t.name;
       throw new Error(`${guide} is already on your team`);
     }

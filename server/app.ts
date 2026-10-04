@@ -2,7 +2,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import type { ServerEvent } from "../shared/types.ts";
 import { serverDefaultModel, type Store } from "./store.ts";
 import type { Team } from "./team.ts";
-import { TEMPLATES } from "./templates.ts";
+import { GUIDE_TEMPLATE_ID, TEMPLATES } from "./templates.ts";
 import { MAX_UPLOAD_BYTES } from "./uploads.ts";
 
 export function createApp(store: Store, team: Team) {
@@ -30,7 +30,7 @@ export function createApp(store: Store, team: Team) {
     });
   });
 
-  api.get("/templates", (_req, res) => res.json(TEMPLATES.filter((t) => t.id !== "genny")));
+  api.get("/templates", (_req, res) => res.json(TEMPLATES.filter((t) => t.id !== GUIDE_TEMPLATE_ID)));
 
   api.post("/channels/:id/messages", (req, res) => {
     const ids = Array.isArray(req.body?.attachmentIds) ? req.body.attachmentIds.map(String) : [];

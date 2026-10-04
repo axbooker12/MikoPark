@@ -37,7 +37,7 @@ Half of the team is African American; the rest reflect a mix of backgrounds.
 
 | Agent | Save as | Prompt (then add the style text) |
 |---|---|---|
-| Benson (guide & team lead) | `genny.jpg` | African American man in his 50s, short cropped hair, neatly trimmed beard, charcoal suit jacket and white shirt |
+| Benson (guide & team lead) | `benson.jpg` | African American man in his 50s, short cropped hair, neatly trimmed beard, charcoal suit jacket and white shirt |
 | ContentWriter | `writer.jpg` | African American woman in her 30s, shoulder-length curly hair, navy blazer over a white top |
 | DataAnalyst | `analyst.jpg` | African American man in his 30s, short hair, thin-framed glasses, navy sweater over a collared shirt |
 | SoftwareEngineer | `engineer.jpg` | African American man in his late 20s, short locs, dark gray sweater over a collared shirt |

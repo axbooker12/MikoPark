@@ -3,7 +3,7 @@ import type { Agent, Attachment, Channel } from "../shared/types.ts";
 import { findModel } from "../shared/models.ts";
 import type { Store } from "./store.ts";
 import { FOLLOW_UP_PREFIX, MAX_REPLY_PARAGRAPHS } from "../shared/followup.ts";
-import { TEMPLATES } from "./templates.ts";
+import { GUIDE_TEMPLATE_ID, TEMPLATES } from "./templates.ts";
 
 type BetaMessageParam = Anthropic.Beta.Messages.BetaMessageParam;
 type BetaToolUnion = Anthropic.Beta.Messages.BetaToolUnion;
@@ -301,7 +301,7 @@ export function runTool(store: Store, agent: Agent, channel: Channel, name: stri
       store.addMemory(String(input.fact ?? ""), by);
       return "Saved to shared memory.";
     case "list_marketplace":
-      return TEMPLATES.filter((t) => t.id !== "genny")
+      return TEMPLATES.filter((t) => t.id !== GUIDE_TEMPLATE_ID)
         .map((t) => `${t.id}: ${t.name}, ${t.role} — ${t.tagline}`)
         .join("\n");
     case "hire_agent": {

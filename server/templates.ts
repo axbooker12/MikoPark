@@ -10,11 +10,11 @@ const CONFIDENTIALITY_NOTICE =
   "Don't share privileged or highly sensitive client information unless your organization has approved it.";
 
 // The agent marketplace. Each template becomes a long-lived teammate when hired.
-export const GENNY_TEMPLATE_ID = "genny";
+export const GUIDE_TEMPLATE_ID = "benson";
 
 const TEMPLATE_LIST: AgentTemplate[] = [
   {
-    id: GENNY_TEMPLATE_ID,
+    id: GUIDE_TEMPLATE_ID,
     name: "Benson",
     role: "Onboarding guide & team lead",
     avatar: "🎩",

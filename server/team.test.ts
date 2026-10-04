@@ -179,7 +179,7 @@ describe("legal agents and categories", () => {
     expect(writer.disclaimer).toBeUndefined();
   });
   it("puts every marketplace agent in a known category", () => {
-    for (const t of TEMPLATES.filter((t) => t.id !== "genny")) expect(CATEGORIES).toContain(t.category);
+    for (const t of TEMPLATES.filter((t) => t.id !== "benson")) expect(CATEGORIES).toContain(t.category);
   });
 });
 
@@ -244,5 +244,21 @@ describe("agent photos", () => {
     const pdf = store.uploads.save({ name: "a.pdf", type: "application/pdf", data: Buffer.from("%PDF") });
     expect(() => store.updateAgent(agent.id, { portrait: `/api/uploads/${pdf.id}` })).toThrow(/photo/);
     expect(() => store.updateAgent(agent.id, { portrait: "https://evil.example/x.png" })).toThrow(/photo/);
+  });
+});
+
+describe("guide template id", () => {
+  it("moves Benson off the old genny template id when a saved workspace loads", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mp-")), "workspace.json");
+    const ws = JSON.parse(JSON.stringify(new Store(null).workspace));
+    ws.agents[0].templateId = "genny";
+    fs.writeFileSync(file, JSON.stringify({ workspace: ws, messages: [] }));
+
+    const store = new Store(file);
+    expect(store.workspace.agents[0].templateId).toBe("benson");
+    expect(store.workspace.agents[0].name).toBe("Benson");
   });
 });
