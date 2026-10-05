@@ -60,14 +60,35 @@ describe("Team routing", () => {
     expect(brain.calls.map((c) => c.agent)).toEqual(["Benson"]);
   });
 
-  it("hands off between agents via @mentions, adding them to the channel", async () => {
+  it("hands off between agents in the channel via @mentions", async () => {
     const { store, brain, team } = setup({ Benson: "Over to @SoftwareEngineer", SoftwareEngineer: "Done. @Benson fyi" });
     const kai = store.hireAgent("engineer");
-    const ch = store.createChannel("build", "", [store.workspace.agents[0].id]);
+    const ch = store.createChannel("build", "", [store.workspace.agents[0].id, kai.id]);
     team.postHumanMessage(ch.id, "@Benson please build it");
     await team.idle();
     expect(brain.calls.map((c) => c.agent)).toEqual(["Benson", "SoftwareEngineer", "Benson", "SoftwareEngineer"]);
-    expect(store.channel(ch.id)!.agentIds).toContain(kai.id);
+  });
+
+  it("never lets an agent pull a removed teammate back into a channel", async () => {
+    const { store, brain, team } = setup({ Benson: "Over to @SoftwareEngineer and @ContentWriter" });
+    const kai = store.hireAgent("engineer");
+    const wren = store.hireAgent("writer");
+    const ch = store.createChannel("build", "", [store.workspace.agents[0].id, kai.id, wren.id]);
+    store.setChannelMembers(ch.id, [store.workspace.agents[0].id]);
+    team.postHumanMessage(ch.id, "@Benson please build it");
+    await team.idle();
+    expect(brain.calls.map((c) => c.agent)).toEqual(["Benson"]);
+    expect(store.channel(ch.id)!.agentIds).toEqual([store.workspace.agents[0].id]);
+  });
+
+  it("adds an agent a human @mentions", async () => {
+    const { store, brain, team } = setup();
+    const kai = store.hireAgent("engineer");
+    const ch = store.createChannel("build", "", []);
+    team.postHumanMessage(ch.id, "@SoftwareEngineer join us");
+    await team.idle();
+    expect(brain.calls.map((c) => c.agent)).toEqual(["SoftwareEngineer"]);
+    expect(store.channel(ch.id)!.agentIds).toEqual([kai.id]);
   });
 
   it("caps hand-off chains", async () => {

@@ -14,8 +14,8 @@ hand them tasks, and let them build up shared team memory.
 - **Benson:** a built-in onboarding guide who recommends hires, can hire agents for you, and splits goals into tasks.
 - **Channels and DMs:** DMs always get a reply. In channels, agents reply only when @mentioned, and
   mentioning an agent pulls them into the channel. The composer autocompletes @mentions.
-- **Agent hand-offs:** when an agent's reply @mentions a teammate, that teammate picks up next
-  (capped at 3 hops per human message).
+- **Agent hand-offs:** when an agent's reply @mentions a teammate in the same channel, that teammate picks up next
+  (capped at 3 hops per human message). Agents can't add teammates to a channel; only you can.
 - **Task board:** To do → In progress → Needs review → Done. Assign a task to an agent and press **Run**:
   the agent does the work in chat and moves the task to review. Agents can create, assign and update tasks too.
 - **Shared team memory:** facts every agent sees in every conversation. You and the agents can both add to it.

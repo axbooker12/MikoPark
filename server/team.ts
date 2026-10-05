@@ -8,8 +8,8 @@ export const MAX_HANDOFF_DEPTH = 3;
 
 /**
  * Routes messages to agents. In a DM the agent always replies; in a channel only
- * @mentioned agents reply (and a mentioned agent who isn't a member is added).
- * An agent's reply can @mention teammates, which hands the conversation on.
+ * @mentioned agents reply (and an agent a human @mentions who isn't a member is added).
+ * An agent's reply can @mention teammates already in the channel, which hands the conversation on.
  */
 export class Team {
   private queues = new Map<string, Promise<void>>();
@@ -136,16 +136,14 @@ export class Team {
     // Hand-offs: teammates this agent @mentioned get a turn next.
     if (depth + 1 > MAX_HANDOFF_DEPTH) return;
     const reply = this.store.channelMessages(channelId, 1000).find((m) => m.id === msg.id)?.content ?? "";
-    const others = findMentionedAgents(reply, this.store.workspace.agents).filter((a) => a.id !== agent.id);
-    if (!others.length) return;
     const fresh = this.store.channel(channelId)!;
-    if (fresh.kind === "channel") {
-      const add = others.filter((a) => !fresh.agentIds.includes(a.id)).map((a) => a.id);
-      if (add.length) this.store.setChannelMembers(fresh.id, [...fresh.agentIds, ...add]);
-    } else {
-      // DMs are one-to-one, so @mentions there don't pull teammates in.
-      return;
-    }
+    // DMs are one-to-one, so @mentions there don't pull teammates in.
+    if (fresh.kind !== "channel") return;
+    // Only agents already in the channel pick up a hand-off: who's in a conversation is the human's call,
+    // so an agent can't bring back a teammate who was removed.
+    const others = findMentionedAgents(reply, this.store.workspace.agents).filter(
+      (a) => a.id !== agent.id && fresh.agentIds.includes(a.id),
+    );
     for (const other of others) this.schedule(other, fresh, depth + 1);
   }
 }

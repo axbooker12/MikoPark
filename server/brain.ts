@@ -46,9 +46,10 @@ export function systemPrompt(store: Store, agent: Agent, channel: Channel): { st
     "- If they reply asking for more information, go deeper on that subtopic, still within the same length limit.",
   ].join("\n");
 
+  const inChannel = (a: Agent) => channel.kind === "channel" && channel.agentIds.includes(a.id);
   const teammates = ws.agents
     .filter((a) => a.id !== agent.id)
-    .map((a) => `- @${a.name} — ${a.role}${channel.agentIds.includes(a.id) ? " (in this conversation)" : ""}`);
+    .map((a) => `- @${a.name} — ${a.role}${inChannel(a) ? " (in this conversation)" : ""}`);
   const humans = ws.humans.map((h) => `- ${h.name}`);
   const openTasks = ws.tasks
     .filter((t) => t.status !== "done")
@@ -60,7 +61,9 @@ export function systemPrompt(store: Store, agent: Agent, channel: Channel): { st
   const where =
     channel.kind === "dm"
       ? "You are in a direct message with a human teammate. Teammates can't see DMs, so @mentions here won't reach them — use create_task to hand off work instead."
-      : `You are in the #${channel.name} channel${channel.topic ? ` (topic: ${channel.topic})` : ""}.`;
+      : `You are in the #${channel.name} channel${channel.topic ? ` (topic: ${channel.topic})` : ""}. ` +
+        "Only teammates marked (in this conversation) can see it or pick up an @mention here. A human chooses who is in it, " +
+        "so don't @mention anyone else; if you think someone else should help, say so and let the human add them.";
 
   const context = [
     where,
