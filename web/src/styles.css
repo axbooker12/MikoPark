@@ -170,7 +170,22 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 .dm-role { font-size: 12px; color: var(--sidebar-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-item.active .dm-role { color: #3a4247; }
 .nav-item .dot-typing { margin-left: auto; }
-.sidebar-foot { margin-top: auto; padding: 12px 8px 0; display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--sidebar-hover); }
+.sidebar-foot {
+  margin-top: auto;
+  padding: 12px 8px 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border: 0;
+  border-top: 1px solid var(--sidebar-hover);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sidebar-foot:hover { color: #fff; }
 
 /* ---------- chat ---------- */
 .chat, .page { display: flex; flex-direction: column; flex: 1; min-height: 0; }

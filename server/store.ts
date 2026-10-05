@@ -6,6 +6,7 @@ import type {
   Agent,
   AuthorKind,
   Channel,
+  Human,
   MemoryItem,
   Message,
   ServerEvent,
@@ -314,6 +315,22 @@ export class Store extends EventEmitter {
     if (general && !general.agentIds.includes(agent.id)) general.agentIds.push(agent.id);
     this.workspaceChanged();
     return agent;
+  }
+
+  /** Renames the person using the workspace; agents see the new name in history and their prompt. */
+  updateMe(patch: { name?: string }): Human {
+    const me = this.workspace.me;
+    if (patch.name !== undefined) {
+      const name = patch.name.trim().replace(/\s+/g, " ");
+      if (!name) throw new Error("Name is required");
+      if (name.length > 40) throw new Error("Keep your name under 40 characters");
+      if (this.workspace.agents.some((a) => a.name.toLowerCase() === name.toLowerCase())) throw new Error(`A teammate is already called ${name}`);
+      me.name = name;
+      const listed = this.workspace.humans.find((h) => h.id === me.id);
+      if (listed) listed.name = name;
+    }
+    this.workspaceChanged();
+    return me;
   }
 
   updateAgent(id: string, patch: Partial<Pick<Agent, "name" | "role" | "instructions" | "webSearch">> & { portrait?: string | null }): Agent {

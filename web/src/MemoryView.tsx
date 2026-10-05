@@ -52,7 +52,7 @@ export function MemoryView({ ws, onMenu }: { ws: Workspace; onMenu: () => void }
                 <div>
                   <p>{m.content}</p>
                   <small className="muted">
-                    {agent ? agent.name : m.source.kind === "human" ? "You" : "Former teammate"} · {timeAgo(m.createdAt)}
+                    {agent ? agent.name : m.source.kind === "human" ? ws.me.name : "Former teammate"} · {timeAgo(m.createdAt)}
                   </small>
                 </div>
                 <button className="icon-btn small" onClick={() => void api.deleteMemory(m.id)} aria-label="Forget">

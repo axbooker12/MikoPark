@@ -87,6 +87,10 @@ export function createApp(store: Store, team: Team) {
     res.status(201).json(store.hireAgent(String(req.body?.templateId ?? ""), req.body?.name));
   });
 
+  api.patch("/me", (req, res) => {
+    res.json(store.updateMe({ name: req.body?.name }));
+  });
+
   api.patch("/agents/:id", (req, res) => {
     const { name, role, instructions, webSearch, portrait } = req.body ?? {};
     res.json(store.updateAgent(req.params.id, { name, role, instructions, webSearch, portrait }));

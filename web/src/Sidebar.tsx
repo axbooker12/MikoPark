@@ -10,9 +10,10 @@ interface Props {
   onGo: (v: View) => void;
   onHire: () => void;
   onNewChannel: () => void;
+  onProfile: () => void;
 }
 
-export function Sidebar({ ws, view, messages, onGo, onHire, onNewChannel }: Props) {
+export function Sidebar({ ws, view, messages, onGo, onHire, onNewChannel, onProfile }: Props) {
   const channels = ws.channels.filter((c) => c.kind === "channel");
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
     try {
@@ -108,9 +109,9 @@ export function Sidebar({ ws, view, messages, onGo, onHire, onNewChannel }: Prop
         );
       })}
 
-      <div className="sidebar-foot">
+      <button className="sidebar-foot" onClick={onProfile} title="Edit your name">
         <Avatar emoji={ws.me.avatar} size={24} /> {ws.me.name}
-      </div>
+      </button>
     </nav>
   );
 }

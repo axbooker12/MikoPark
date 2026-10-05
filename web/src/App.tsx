@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatView } from "./ChatView.tsx";
 import { MemoryView } from "./MemoryView.tsx";
-import { AgentProfileModal, DepartmentsModal, NewChannelModal } from "./Modals.tsx";
+import { AgentProfileModal, DepartmentsModal, MyProfileModal, NewChannelModal } from "./Modals.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { TasksView } from "./TasksView.tsx";
 import { useWorkspace } from "./useWorkspace.ts";
 
 export type View = { kind: "channel"; id: string } | { kind: "tasks" } | { kind: "memory" };
-type ModalState = { kind: "hire" } | { kind: "new-channel" } | { kind: "agent"; id: string } | null;
+type ModalState = { kind: "hire" } | { kind: "new-channel" } | { kind: "agent"; id: string } | { kind: "me" } | null;
 
 function parseHash(): View | null {
   const [kind, id] = location.hash.replace(/^#\/?/, "").split("/");
@@ -71,6 +71,7 @@ export function App() {
         onGo={go}
         onHire={() => setModal({ kind: "hire" })}
         onNewChannel={() => setModal({ kind: "new-channel" })}
+        onProfile={() => setModal({ kind: "me" })}
       />
       <div className="scrim" onClick={() => setNavOpen(false)} />
       <main className="main">
@@ -110,6 +111,7 @@ export function App() {
       {modal?.kind === "new-channel" && (
         <NewChannelModal ws={ws} onClose={() => setModal(null)} onCreated={(id) => (setModal(null), go({ kind: "channel", id }))} />
       )}
+      {modal?.kind === "me" && <MyProfileModal ws={ws} onClose={() => setModal(null)} />}
       {modal?.kind === "agent" && <AgentProfileModal ws={ws} agentId={modal.id} onClose={() => setModal(null)} />}
     </div>
   );

@@ -231,6 +231,39 @@ function AgentPicker({ ws, value, onChange }: { ws: Workspace; value: string[]; 
   );
 }
 
+export function MyProfileModal({ ws, onClose }: { ws: Workspace; onClose: () => void }) {
+  const [name, setName] = useState(ws.me.name);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    try {
+      await api.updateMe({ name });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <Modal title="Your profile" onClose={onClose}>
+      <form className="stack-form" onSubmit={(e) => (e.preventDefault(), void save())}>
+        <label>
+          Your name
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Amory" />
+        </label>
+        <p className="muted">Agents see this name and use it when they talk to you.</p>
+        {error && <p className="form-error">{error}</p>}
+        <div className="row end">
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="primary" disabled={!name.trim()}>
+            Save
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export function AgentProfileModal({ ws, agentId, onClose }: { ws: Workspace; agentId: string; onClose: () => void }) {
   const agent = ws.agents.find((a) => a.id === agentId);
   const [name, setName] = useState(agent?.name ?? "");

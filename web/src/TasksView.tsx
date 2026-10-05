@@ -99,7 +99,7 @@ function TaskCard({ ws, task, onGo }: { ws: Workspace; task: Task; onGo: (v: Vie
   const [open, setOpen] = useState(false);
   const agent = ws.agents.find((a) => a.id === task.assigneeAgentId);
   const channel = ws.channels.find((c) => c.id === task.channelId);
-  const creator = task.createdBy.kind === "agent" ? ws.agents.find((a) => a.id === task.createdBy.id)?.name : "You";
+  const creator = task.createdBy.kind === "agent" ? ws.agents.find((a) => a.id === task.createdBy.id)?.name : ws.me.name;
   const run = () => void api.runTask(task.id).catch((e) => alert((e as Error).message));
 
   return (

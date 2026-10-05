@@ -262,3 +262,17 @@ describe("guide template id", () => {
     expect(store.workspace.agents[0].name).toBe("Benson");
   });
 });
+
+describe("your name", () => {
+  it("renames you everywhere agents see it", async () => {
+    const store = new Store(null);
+    const app = createApp(store, new Team(store, new DemoBrain(store)));
+    const res = await request(app).patch("/api/me").send({ name: "  Amory " });
+    expect(res.status).toBe(200);
+    expect(store.workspace.me.name).toBe("Amory");
+    expect(store.workspace.humans[0].name).toBe("Amory");
+    expect(store.authorName("human", store.workspace.me.id)).toBe("Amory");
+    expect((await request(app).patch("/api/me").send({ name: " " })).status).toBe(400);
+    expect((await request(app).patch("/api/me").send({ name: "Benson" })).status).toBe(400);
+  });
+});
